@@ -2,6 +2,8 @@ name: Build and Push Fedora Bootc
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'Containerfile'
 jobs:
   publish-bootc:
     runs-on: ubuntu-latest
