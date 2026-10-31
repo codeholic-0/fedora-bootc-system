@@ -18,6 +18,7 @@ RUN dnf -y install \
         filelight \
         kcalc \
         kdeconnectd \
+        kfind \
         keepassxc
 
 # Network, Bluetooth, Wifi
@@ -66,7 +67,8 @@ RUN dnf -y install \
         util-linux \
         glibc-locale-source \
         glibc-langpack-en \
-        sudo \
+        sudo
+
 # Garbage removal
 RUN dnf remove -y plasma-welcome
 
