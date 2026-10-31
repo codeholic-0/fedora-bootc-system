@@ -28,6 +28,7 @@ RUN dnf -y install \
         gthumb \
         vlc \
         # Utilities
+        dnf5-plugins \
         intel-gmmlib \
         bolt \
         libva-intel-media-driver \
