@@ -26,6 +26,10 @@ RUN dnf -y install \
         glibc-langpack-en \
         plymouth\
         plymouth-theme-breeze \
+        ark \
+        7-zip \
+        zip \
+        unzip \
         sudo
 
 # Network, Bluetooth, Wifi
