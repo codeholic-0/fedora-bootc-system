@@ -55,6 +55,18 @@ RUN dnf -y install \
 RUN dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
 RUN dnf install -y --allowerasing ffmpeg vlc gthumb
 
+#Install Fonts
+# Install Fonts
+RUN mkdir -p /usr/local/share/fonts/FiraCode /usr/local/share/fonts/Symbols && \
+    curl -fLo /tmp/FiraCode.zip \
+        https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/FiraCode.zip && \
+    curl -fLo /tmp/NerdFontsSymbolsOnly.zip \
+        https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/NerdFontsSymbolsOnly.zip && \
+    unzip -o /tmp/FiraCode.zip "*.ttf" -d /usr/local/share/fonts/FiraCode/ && \
+    unzip -o /tmp/NerdFontsSymbolsOnly.zip "*.ttf" -d /usr/local/share/fonts/Symbols/ && \
+    fc-cache -fV && \
+    rm -f /tmp/FiraCode.zip /tmp/NerdFontsSymbolsOnly.zip
+
 # Nix Dir, will be bind mounted to /var/nix
 RUN mkdir -p /nix
 
