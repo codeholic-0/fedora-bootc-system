@@ -67,6 +67,10 @@ RUN dnf -y install \
         util-linux \
         glibc-locale-source \
         glibc-langpack-en \
+        plymouth\
+        plymouth-system-theme \
+        plymouth-theme-spinner \
+        plymouth-plugin-label \
         sudo
 
 # Garbage removal
@@ -85,6 +89,9 @@ RUN dnf clean all -y
 # Nix Dir, will be bind mounted to /var/nix
 RUN mkdir -p /nix
 
+# Plymouth Enable 
+RUN plymouth-set-default-theme bgrt
+RUN grubby --update-kernel=ALL --args="quiet rhgb" && dracut --regenerate-all --force
 # Enable desktop, NW
 RUN systemctl enable plasmalogin.service -f
 RUN systemctl enable NetworkManager.service -f
