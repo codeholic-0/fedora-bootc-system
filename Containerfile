@@ -13,6 +13,7 @@ RUN dnf -y install \
         spectacle \
         kinfocenter \
         okular \
+        kde-gtk-config \
         # Network, Bluetooth, Wifi
         NetworkManager \
         NetworkManager-wifi \
