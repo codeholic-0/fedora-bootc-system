@@ -25,10 +25,7 @@ RUN dnf -y install \
         glibc-locale-source \
         glibc-langpack-en \
         plymouth\
-        plymouth-system-theme \
-        plymouth-theme-spinner \
-        plymouth-plugin-label \
-        grubby \
+        plymouth-theme-breeze \
         sudo
 
 # Network, Bluetooth, Wifi
@@ -63,7 +60,7 @@ COPY start-nix-socket.service /etc/systemd/system/start-nix-socket.service
 
 # Plymouth Enable 
 COPY plymouth.toml /usr/lib/bootc/kargs.d/50-plymouth.toml
-RUN plymouth-set-default-theme -R bgrt
+RUN plymouth-set-default-theme breeze
 
 
 # Plasma Desktop
