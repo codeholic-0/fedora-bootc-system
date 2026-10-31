@@ -1,0 +1,11 @@
+curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install | sh -s -- --daemon
+
+experimental-features = nix-command flakes
+
+sudo systemctl restart nix-daemon
+
+nix run home-manager/release-26.05 -- init
+
+--add needed pkgs
+
+home-manager switch --flake ~/.config/home-manager

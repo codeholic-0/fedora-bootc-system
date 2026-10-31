@@ -1,0 +1,22 @@
+name: Build and Push Fedora Bootc
+on:
+  push:
+    branches: [ main ]
+jobs:
+  publish-bootc:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build Bootc Image
+        run: podman build -t ghcr.io/${{ github.repository_owner }}/fedora-bootc:latest .
+
+      - name: Push Bootc Image
+        run: podman push ghcr.io/${{ github.repository_owner }}/fedora-bootc:latest
