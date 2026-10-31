@@ -59,10 +59,11 @@ RUN dnf install -y --allowerasing ffmpeg vlc gthumb
 
 # Nix Dir, will be bind mounted to /var/nix
 RUN mkdir -p /nix
+COPY start-nix-socket.service /etc/systemd/system/start-nix-socket.service
 
 # Plymouth Enable 
 COPY plymouth.toml /usr/lib/bootc/kargs.d/50-plymouth.toml
-RUN plymouth-set-default-theme bgrt
+RUN plymouth-set-default-theme -R bgrt
 
 
 # Plasma Desktop
