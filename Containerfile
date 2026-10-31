@@ -71,6 +71,7 @@ RUN dnf -y install \
         plymouth-system-theme \
         plymouth-theme-spinner \
         plymouth-plugin-label \
+        grubby \
         sudo
 
 # Garbage removal
