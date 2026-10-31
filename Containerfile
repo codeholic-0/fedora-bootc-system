@@ -9,17 +9,27 @@ RUN dnf -y install \
         plasma-pa \
         konsole \
         kscreen \
-        kate \
+        kwrite \
+        dolphin \
         spectacle \
         kinfocenter \
         okular \
         kde-gtk-config \
+        filelight \
+        kcalc \
+        kdeconnectd \
+        keepassxc \
         # Network, Bluetooth, Wifi
         NetworkManager \
         NetworkManager-wifi \
         NetworkManager-bluetooth \
         wireless-regdb \
         bluez-obexd \
+        # Firewall
+        firewalld \
+        firewall-config \
+        sealert
+        setroubleshoot
         # Sound
         alsa-utils \
         alsa-ucm \
@@ -35,6 +45,7 @@ RUN dnf -y install \
         libva-intel-media-driver \
         pciutils \
         smartmontools \
+        gvfs \
         thermald \
         fprintd \
         libfprint \
@@ -44,6 +55,8 @@ RUN dnf -y install \
         vim-enhanced \
         git \
         curl \
+        wget \
+        persepolis \
         util-linux-core \
         util-linux \
         glibc-locale-source \
@@ -63,3 +76,4 @@ RUN mkdir -p /nix
 # Enable desktop, NW
 RUN systemctl enable plasmalogin.service -f
 RUN systemctl enable NetworkManager.service -f
+RUN systemctl enable firewalld.service -f
