@@ -27,9 +27,6 @@ RUN dnf -y install \
         plymouth\
         plymouth-theme-breeze \
         ark \
-        7-zip \
-        zip \
-        unzip \
         sudo
 
 # Network, Bluetooth, Wifi
