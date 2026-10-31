@@ -4,7 +4,7 @@ experimental-features = nix-command flakes
 
 sudo systemctl restart nix-daemon
 
-nix run home-manager/release-26.05 -- init
+nix run home-manager/release-26.05 -- init --switch
 
 --add needed pkgs
 
