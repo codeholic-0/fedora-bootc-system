@@ -26,7 +26,6 @@ RUN dnf -y install \
         glibc-langpack-en \
         plymouth\
         plymouth-theme-breeze \
-        ark \
         7zip \
         zip \
         sudo
@@ -78,25 +77,7 @@ RUN plymouth-set-default-theme breeze
 
 
 # Plasma Desktop
-RUN dnf -y install \
-        plasma-desktop \
-        plasma-workspace \
-        plasma-login-manager \
-        plasma-nm \
-        plasma-pa \
-        konsole \
-        kscreen \
-        kwrite \
-        dolphin \
-        spectacle \
-        kinfocenter \
-        okular \
-        kde-gtk-config \
-        filelight \
-        kcalc \
-        kdeconnectd \
-        kfind \
-        keepassxc
+RUN dnf -y install @kde-plasma-desktop keepassxc
 
 # Garbage removal
 RUN dnf remove -y plasma-welcome
