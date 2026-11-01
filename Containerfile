@@ -77,7 +77,7 @@ RUN plymouth-set-default-theme breeze
 
 
 # Plasma Desktop
-RUN dnf -y install @kde-plasma-desktop keepassxc
+RUN dnf -y install @kde-desktop keepassxc
 
 # Garbage removal
 RUN dnf remove -y plasma-welcome
