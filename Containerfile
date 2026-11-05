@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora-bootc:44
+FROM quay.io/fedora/fedora-bootc:45
 
 # Utilities
 RUN dnf -y install \
@@ -6,8 +6,6 @@ RUN dnf -y install \
         smartmontools \
         gvfs \
         thermald \
-        fprintd \
-        libfprint \
         kernel-modules-extra \
         btop \
         fastfetch \
