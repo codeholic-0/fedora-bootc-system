@@ -1,0 +1,27 @@
+FROM quay.io/fedora/fedora-bootc:45
+
+# Utilities
+RUN dnf -y install \
+        kernel-modules-extra \
+        btop \
+        fastfetch \
+        vim-enhanced \
+        git \
+        curl \
+        wget \
+        util-linux-core \
+        util-linux \
+        7zip \
+        zip \
+        sudo
+
+# Network, Bluetooth, Wifi
+RUN dnf -y install \
+        NetworkManager \
+        NetworkManager-wifi
+
+# Clean UP
+RUN dnf clean all -y
+
+# Enable desktop, NW
+RUN systemctl enable NetworkManager.service -f
