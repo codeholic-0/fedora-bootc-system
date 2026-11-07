@@ -3,7 +3,7 @@ ENV FEDORA_VER="45"
 
 # dnf-plugins-core FIRST: the bootc base has no dnf plugin packages, but the
 # copr/config-manager/setopt commands below all require them.
-RUN dnf -y install dnf-plugins-core
+RUN dnf -y install dnf-plugins-core dnf5-plugins
 
 # Add Repos; Enable; Update Cache
 RUN dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$FEDORA_VER.noarch.rpm" \
