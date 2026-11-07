@@ -1,0 +1,149 @@
+name: Build and Push Fedora Bootc
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Containerfile"
+      - "Containerfile.testing"
+      - "Containerfile.minimal"
+      - ".github/workflows/bootc-publish.yaml"
+  workflow_dispatch:
+    inputs:
+      minimal:
+        description: "Build minimal"
+        type: boolean
+        default: false
+      testing:
+        description: "Build testing"
+        type: boolean
+        default: false
+      final:
+        description: "Build final"
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/fedora-kde-bootc
+
+jobs:
+  changes:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      minimal: ${{ steps.filter.outputs.minimal }}
+      testing: ${{ steps.filter.outputs.testing }}
+      final: ${{ steps.filter.outputs.final }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changed Containerfiles
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            minimal:
+              - 'Containerfile.minimal'
+            testing:
+              - 'Containerfile.testing'
+            final:
+              - 'Containerfile'
+              - '.github/workflows/bootc-publish.yaml'
+
+  build-minimal:
+    if: needs.changes.outputs.minimal == 'true' || github.event.inputs.minimal == 'true'
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Log in to GHCR
+        run: |
+          IMAGE="${IMAGE,,}"
+          echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build minimal image
+        run: |
+          IMAGE="${IMAGE,,}"
+          podman build -f Containerfile.minimal -t "$IMAGE:minimal-latest" .
+
+      - name: Push minimal image
+        run: |
+          IMAGE="${IMAGE,,}"
+          podman push "$IMAGE:minimal-latest"
+
+  build-testing:
+    if: needs.changes.outputs.testing == 'true' || github.event.inputs.testing == 'true'
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Log in to GHCR
+        run: |
+          IMAGE="${IMAGE,,}"
+          echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build testing image
+        run: |
+          IMAGE="${IMAGE,,}"
+          podman build -f Containerfile.testing -t "$IMAGE:testing" .
+
+      - name: Push testing image
+        run: |
+          IMAGE="${IMAGE,,}"
+          podman push "$IMAGE:testing"
+
+  build-final:
+    if: needs.changes.outputs.final == 'true' || github.event.inputs.final == 'true'
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Log in to GHCR
+        run: |
+          IMAGE="${IMAGE,,}"
+          echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build final image
+        run: |
+          IMAGE="${IMAGE,,}"
+          podman build -t "$IMAGE:stable" -t "$IMAGE:latest" .
+
+      - name: Push final image
+        run: |
+          IMAGE="${IMAGE,,}"
+          podman push "$IMAGE:stable"
+          podman push "$IMAGE:latest"
