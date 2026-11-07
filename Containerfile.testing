@@ -16,11 +16,16 @@ RUN dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-rel
     && dnf install -y --refresh rpmfusion-free-release-tainted rpmfusion-nonfree-release-tainted \
     && dnf makecache
 
-# Graphical groups as a safety net (most of these pkgs are also in the full list)
-RUN dnf -y group install kde-desktop \
-    && dnf -y group install multimedia
+# Codec stack — @multimedia pulls the full gstreamer plugin set; kept as an
+# explicit group since it expresses intended behaviour (full codec support)
+# and insures against future trims of the package list below.
+RUN dnf -y group install multimedia
 
 # Full package set replicated from `rpm -qa` of the source Fedora KDE system.
+# NOTE: @kde-desktop group intentionally NOT used — the rpm -qa list below IS
+# the source of truth (comps contents drift per Fedora release and pull bloat).
+# All of it installed in one transaction for fastest resolution (measured: a
+# separate group install added ~3 min for content this list already covers).
 # Filtered OUT: codium, zen-browser (helium only), the VM stack (qemu/libvirt/
 # virt-*/xen/swtpm/edk2/spice/nbdkit/passt...), wine+winetricks+mingw, dosbox-
 # staging, EDA tools (iverilog/verilator/gtkwave), bootc-managed boot bits
@@ -2160,10 +2165,8 @@ RUN dnf -y install --allowerasing \
         zstd \
         zvbi \
         zxcvbn-c \
-        zxing-cpp
-
-# Clean UP
-RUN dnf clean all -y
+        zxing-cpp \
+    && dnf clean all -y
 
 # Enable Services
 RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service -f

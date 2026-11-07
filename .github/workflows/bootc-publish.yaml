@@ -27,6 +27,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/${{ github.repository_owner }}/fedora-kde-bootc
 
+# Cancel superseded runs of this workflow on the same branch to avoid
+# burning build+push minutes on outdated commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   changes:
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
@@ -39,7 +45,7 @@ jobs:
       final: ${{ steps.filter.outputs.final }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Detect changed Containerfiles
         uses: dorny/paths-filter@v3
@@ -63,7 +69,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install podman
         run: |
@@ -83,7 +89,7 @@ jobs:
       - name: Push minimal image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push "$IMAGE:minimal-latest"
+          podman push --compression-format zstd:chunked "$IMAGE:minimal-latest"
 
   build-testing:
     if: needs.changes.outputs.testing == 'true' || github.event.inputs.testing == 'true'
@@ -94,7 +100,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install podman
         run: |
@@ -114,7 +120,7 @@ jobs:
       - name: Push testing image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push "$IMAGE:testing"
+          podman push --compression-format zstd:chunked "$IMAGE:testing"
 
   build-final:
     if: needs.changes.outputs.final == 'true' || github.event.inputs.final == 'true'
@@ -125,7 +131,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install podman
         run: |
@@ -145,5 +151,5 @@ jobs:
       - name: Push final image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push "$IMAGE:stable"
-          podman push "$IMAGE:latest"
+          podman push --compression-format zstd:chunked "$IMAGE:stable"
+          podman push --compression-format zstd:chunked "$IMAGE:latest"
