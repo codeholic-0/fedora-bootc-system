@@ -105,6 +105,7 @@ RUN dnf -y install \
         kde-connect \
         kde-partitionmanager \
         kscreen \
+        kdebugsettings \
         kjournald \
         kunifiedpush \
         kde-l10n \
@@ -372,6 +373,7 @@ RUN dnf -y install \
         nano \
         zsh \
         gcc \
+        gcc-c++ \
         make \
         ninja-build \
         glibc-devel \
@@ -436,5 +438,3 @@ RUN dnf -y install \
 # ---------------------------------------------------------------------------
 RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service crond.service auditd.service -f
 
-# Testing
-RUN rpm -qa --queryformat='%{NAME} \n' | sort -u > sys.txt && cat sys.txt
