@@ -28,6 +28,15 @@ RUN dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-rel
     && dnf makecache
 
 # ---------------------------------------------------------------------------
+# 2.5) Bridged repos for the ISO depsolver
+# ---------------------------------------------------------------------------
+# The bootc base ships distro repo definitions in /usr/share/dnf5/repos.d/
+# (dnf5 "system repos"). bootc-image-builder's osbuild depsolve only reads
+# the classic /etc/yum.repos.d/, so copy the definitions over so anaconda-iso
+# builds can resolve base packages.
+RUN cp /usr/share/dnf5/repos.d/*.repo /etc/yum.repos.d/ \
+    && dnf clean all
+# ---------------------------------------------------------------------------
 # 3) Codecs & multimedia framework
 # ---------------------------------------------------------------------------
 # @multimedia pulls the full gstreamer plugin set + codec libs; nothing else

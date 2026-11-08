@@ -18,5 +18,5 @@
   quay.io/centos-bootc/bootc-image-builder:latest \
   --rootfs ext4 \
   --type anaconda-iso \
-  "oci_image_name"
+  ghcr.io/codeholic-0/zen-bootc:TAG
     ```
