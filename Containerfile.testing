@@ -364,7 +364,7 @@ RUN dnf -y install \
         zsh \
         git \
         nano \
-        kernel-headers
+        kernel-headers \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
