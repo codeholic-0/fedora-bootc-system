@@ -89,7 +89,7 @@ jobs:
       - name: Push minimal image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push --compression-format zstd:chunked "$IMAGE:minimal-latest"
+          podman push "$IMAGE:minimal-latest"
 
   build-testing:
     if: needs.changes.outputs.testing == 'true' || github.event.inputs.testing == 'true'
@@ -120,7 +120,7 @@ jobs:
       - name: Push testing image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push --compression-format zstd:chunked "$IMAGE:testing"
+          podman push "$IMAGE:testing"
 
   build-final:
     if: needs.changes.outputs.final == 'true' || github.event.inputs.final == 'true'
@@ -151,5 +151,5 @@ jobs:
       - name: Push final image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push --compression-format zstd:chunked "$IMAGE:stable"
-          podman push --compression-format zstd:chunked "$IMAGE:latest"
+          podman push "$IMAGE:stable"
+          podman push "$IMAGE:latest"
