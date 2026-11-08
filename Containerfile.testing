@@ -655,6 +655,7 @@ RUN dnf -y install --allowerasing \
         isns-utils-libs \
         iso-codes \
         isomd5sum \
+        iverilog \
         iw \
         iwlbluetooth-firmware \
         iwlegacy-firmware \
@@ -2056,6 +2057,7 @@ RUN dnf -y install --allowerasing \
         util-linux \
         util-linux-core \
         vazirmatn-vf-fonts \
+        verilator \
         vid.stab \
         vim-data \
         vim-filesystem \
