@@ -38,6 +38,9 @@ RUN dnf -y group install multimedia && dnf clean all
 # 4) KDE Plasma desktop (core)
 # ---------------------------------------------------------------------------
 # Top-level only: kwin/plasma-* dependencies resolve themselves.
+# plasma-nm-* give the System Settings GUIs for the NM VPN plugins installed
+# later; drkonqi is the crash handler, ksshaskpass/pinentry-qt/pam-kwallet the
+# secrets & askpass integration, flatpak-kcm the Flatpak settings module.
 RUN dnf -y install \
         kwin \
         plasma-desktop \
@@ -49,16 +52,25 @@ RUN dnf -y install \
         plasma-vault \
         plasma-systemsettings \
         plasma-nm \
+        plasma-nm-openvpn \
+        plasma-nm-openconnect \
+        plasma-nm-pptp \
+        plasma-nm-openswan \
         plasma-pa \
         plasma-print-manager \
         plasma-browser-integration \
         kdeplasma-addons \
+        plasma-drkonqi \
         bluedevil \
         polkit-kde \
         kde-gtk-config \
         ocean-sound-theme \
         xdg-desktop-portal-kde \
         kcm-plasma-keyboard \
+        flatpak-kcm \
+        ksshaskpass \
+        pinentry-qt \
+        pam-kwallet \
         plasma-login-manager \
         kcm-plasmalogin \
     && dnf clean all
@@ -66,6 +78,8 @@ RUN dnf -y install \
 # ---------------------------------------------------------------------------
 # 5) KDE applications
 # ---------------------------------------------------------------------------
+# kjournald = journald viewer, kdebugsettings = debug category config,
+# kdegraphics-thumbnailers = image previews in Dolphin, kde-l10n = UI translations.
 RUN dnf -y install \
         konsole \
         dolphin \
@@ -84,15 +98,23 @@ RUN dnf -y install \
         kio-admin \
         kio-fuse \
         kio-gdrive \
+        kdnssd \
+        kamera \
+        kdegraphics-thumbnailers \
         kdenetwork-filesharing \
         kde-connect \
         kde-partitionmanager \
         kscreen \
+        kjournald \
+        kunifiedpush \
+        kde-l10n \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
 # 6) Desktop extras (system frameworks pulled in by KDE apps)
 # ---------------------------------------------------------------------------
+# kde-settings-pulseaudio wires KDE audio defaults; libappindicator-gtk3 gives
+# systray icons for Electron apps.
 RUN dnf -y install \
         accountsservice \
         colord \
@@ -100,6 +122,8 @@ RUN dnf -y install \
         desktop-backgrounds-kde \
         desktop-file-utils \
         kde-settings \
+        kde-settings-pulseaudio \
+        libappindicator-gtk3 \
         redhat-menus \
     && dnf clean all
 
@@ -125,10 +149,12 @@ RUN dnf -y install \
 # 8) Input (ibus)
 # ---------------------------------------------------------------------------
 # Kept engine-agnostic: ibus + m17n (covers AS/multi-script schemes) and the
-# typing-booster character predictor. CJK specific engines (anthy, chewing,
-# hangul, libpinyin, table-* ) intentionally excluded.
+# typing-booster character predictor. ibus-gtk4 is required for input methods
+# to work inside GTK4 apps. CJK engines (anthy, chewing, hangul, libpinyin,
+# table-* ) intentionally excluded.
 RUN dnf -y install \
         ibus \
+        ibus-gtk4 \
         ibus-m17n \
         ibus-typing-booster \
         langtable \
@@ -139,16 +165,62 @@ RUN dnf -y install \
 # 9) Audio stack
 # ---------------------------------------------------------------------------
 # instances pulse out of plasma-pa; pulseaudio-utils gives pactl/padsp for CLI.
+# phonon(+vlc backend) is the KDE media framework some widgets/apps use.
 RUN dnf -y install \
         wireplumber \
         pulseaudio-utils \
         alsa-utils \
         alsa-ucm \
         alsa-sof-firmware \
+        phonon-qt6 \
+        phonon-qt6-backend-vlc \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 10) Media, imaging & personal apps
+# 10) Plymouth boot splash
+# ---------------------------------------------------------------------------
+# Basics + the Breeze theme to match the desktop. plymouth-system-theme pulls
+# the plugin/graphic-libs set; the kargs side lives in plymouth.toml (rhgb quiet).
+RUN dnf -y install \
+        plymouth \
+        plymouth-system-theme \
+        plymouth-theme-breeze \
+    && dnf clean all
+
+RUN plymouth-set-default-theme breeze
+
+# ---------------------------------------------------------------------------
+# 11) Hardware support — kernel modules, firmware, boot tooling
+# ---------------------------------------------------------------------------
+# kernel-modules-extra: additional filesystem/net/misc modules for wider hw.
+# iwlwifi-*: Intel Wi-Fi firmware (mvm = modern, dvm = older, mld = newest gen).
+# libertas + b43: Marvell / old Broadcom Wi-Fi.
+# intel-vsc-firmware: Intel Visual Sensing Controller (MIPI camera).
+# intel-lpmd: Intel Low Power daemon for laptop power tuning.
+# usb_modeswitch: mode-switching for 3G/4G WWAN USB dongles.
+# mcelog: CPU machine-check error reporting. grubby/grub2-tools: kernel arg
+# management; zram-generator-defaults supplies the default zram config.
+RUN dnf -y install \
+        kernel-modules-extra \
+        iwlwifi-mvm-firmware \
+        iwlwifi-dvm-firmware \
+        iwlwifi-mld-firmware \
+        libertas-firmware \
+        b43-fwcutter \
+        b43-openfwwf \
+        intel-vsc-firmware \
+        intel-lpmd \
+        usb_modeswitch \
+        usb_modeswitch-data \
+        mcelog \
+        grubby \
+        grub2-tools-extra \
+        grub2-efi-x64-modules \
+        zram-generator-defaults \
+    && dnf clean all
+
+# ---------------------------------------------------------------------------
+# 12) Media, imaging & personal apps
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         helium-bin \
@@ -156,13 +228,14 @@ RUN dnf -y install \
         mediawriter \
         keepassxc \
         vlc \
+        gthumb \
         yt-dlp \
         zenity \
         guvcview \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 11) Network — core, wifi/bluetooth/wwan, VPN
+# 13) Network — core, wifi/bluetooth/wwan, VPN
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         NetworkManager \
@@ -184,7 +257,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 12) Bluetooth extras (explicit per system requirement)
+# 14) Bluetooth extras (explicit per system requirement)
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         bluez \
@@ -200,13 +273,14 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 13) Containers
+# 15) Containers
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         docker-ce \
         docker-compose-plugin \
         docker-buildx-plugin \
         podman \
+        podman-compose \
         flatpak \
         fedora-flathub-remote \
         fedora-workstation-repositories \
@@ -214,12 +288,19 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 14) Printing & scanning
+# 16) Printing & scanning
 # ---------------------------------------------------------------------------
+# cups-pk-helper = privileged print-config helper, system-config-printer-udev =
+# udev hotplug for USB printers, gutenprint = extra printer driver coverage.
 RUN dnf -y install \
         cups \
         cups-filters \
         cups-filters-driverless \
+        cups-pk-helper \
+        system-config-printer-udev \
+        gutenprint \
+        gutenprint-cups \
+        gutenprint-libs \
         hplip \
         sane-backends \
         sane-airscan \
@@ -228,10 +309,15 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 15) Filesystem & storage tools
+# 17) Filesystem & storage tools
 # ---------------------------------------------------------------------------
+# udisks2-btrfs + libblockdev-btrfs add btrfs support to the udisks/KDE stack,
+# compsize is a btrfs compression analyzer.
 RUN dnf -y install \
         btrfs-progs \
+        udisks2-btrfs \
+        libblockdev-btrfs \
+        compsize \
         ntfs-3g \
         exfatprogs \
         e2fsprogs \
@@ -248,12 +334,19 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 16) System services & power/security
+# 18) System services & power/security
 # ---------------------------------------------------------------------------
+# cronie(+anacron)/crontabs = scheduling, audit(+rules) = security logging.
+# Both are enabled in the services step below.
 RUN dnf -y install \
         firewalld \
         firewall-config \
         earlyoom \
+        cronie \
+        cronie-anacron \
+        crontabs \
+        audit \
+        audit-rules \
         thermald \
         fwupd \
         smartmontools \
@@ -271,7 +364,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 17) Developer tools
+# 19) Developer tools
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         git \
@@ -286,7 +379,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 18) CLI utilities
+# 20) CLI utilities
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         btop \
@@ -321,7 +414,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 19) Vulkan & graphics CLI
+# 21) Vulkan & graphics CLI
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         vulkan-tools \
@@ -330,7 +423,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 20) i18n / locale
+# 22) i18n / locale
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         glibc-all-langpacks \
@@ -339,9 +432,9 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 21) Enable Services
+# 23) Enable Services
 # ---------------------------------------------------------------------------
-RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service -f
+RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service crond.service auditd.service -f
 
-# Testing 
-RUN rpm -qa --queryformat='%{NAME} \n' | sort -u
+# Testing
+RUN rpm -qa --queryformat='%{NAME} \n' | sort -u > sys.txt && cat sys.txt
