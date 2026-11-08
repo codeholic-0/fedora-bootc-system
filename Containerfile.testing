@@ -15,11 +15,12 @@ RUN dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-rel
     && dnf config-manager setopt fedora-cisco-openh264.enabled=1 \
     && dnf install -y --refresh rpmfusion-free-release-tainted rpmfusion-nonfree-release-tainted \
     && dnf makecache
+    && dnf clean all
 
 # Codec stack — @multimedia pulls the full gstreamer plugin set; kept as an
 # explicit group since it expresses intended behaviour (full codec support)
 # and insures against future trims of the package list below.
-RUN dnf -y group install multimedia
+RUN dnf -y group install multimedia && dnf clean all
 
 # Full package set replicated from `rpm -qa` of the source Fedora KDE system.
 # NOTE: @kde-desktop group intentionally NOT used — the rpm -qa list below IS
