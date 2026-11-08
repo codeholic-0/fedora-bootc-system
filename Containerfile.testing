@@ -28,28 +28,27 @@ RUN dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-rel
     && dnf makecache
 
 # ---------------------------------------------------------------------------
-# 2.5) Bridged repos for the ISO depsolver
+# 3) Bridged repos for the ISO depsolver
 # ---------------------------------------------------------------------------
-# The bootc base ships distro repo definitions in /usr/share/dnf5/repos.d/
-# (dnf5 "system repos"). bootc-image-builder's osbuild depsolve only reads
-# the classic /etc/yum.repos.d/, so copy the definitions over so anaconda-iso
-# builds can resolve base packages.
+# The bootc base ships its distro repo definitions in /usr/share/dnf5/repos.d/
+# (dnf5 "system repos"). bootc-image-builder's osbuild depsolver only reads the
+# classic /etc/yum.repos.d/, so copy the definitions over or anaconda-iso
+# builds fail with "No match for argument: <base package>".
 RUN cp /usr/share/dnf5/repos.d/*.repo /etc/yum.repos.d/ \
     && dnf clean all
+
 # ---------------------------------------------------------------------------
-# 3) Codecs & multimedia framework
+# 4) Codecs & multimedia framework
 # ---------------------------------------------------------------------------
 # @multimedia pulls the full gstreamer plugin set + codec libs; nothing else
 # needed here. Everything listed below is plugin support, so one group.
 RUN dnf -y group install multimedia && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 4) KDE Plasma desktop (core)
+# 5) KDE Plasma desktop (core, minimized)
 # ---------------------------------------------------------------------------
-# Top-level only: kwin/plasma-* dependencies resolve themselves.
-# plasma-nm-* give the System Settings GUIs for the NM VPN plugins installed
-# later; drkonqi is the crash handler, ksshaskpass/pinentry-qt/pam-kwallet the
-# secrets & askpass integration, flatpak-kcm the Flatpak settings module.
+# Irreducible core + the settings/UI modules that matter. Everything else is
+# dropped in favor of /nix (home-manager) or being simply unused.
 RUN dnf -y install \
         kwin \
         plasma-desktop \
@@ -57,17 +56,10 @@ RUN dnf -y install \
         plasma-lookandfeel-fedora \
         plasma-keyboard \
         plasma-thunderbolt \
-        plasma-disks \
-        plasma-vault \
         plasma-systemsettings \
         plasma-nm \
-        plasma-nm-openvpn \
-        plasma-nm-openconnect \
-        plasma-nm-pptp \
-        plasma-nm-openswan \
         plasma-pa \
         plasma-print-manager \
-        plasma-browser-integration \
         kdeplasma-addons \
         plasma-drkonqi \
         bluedevil \
@@ -85,10 +77,10 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 5) KDE applications
+# 6) KDE applications (minimized)
 # ---------------------------------------------------------------------------
-# kjournald = journald viewer, kdebugsettings = debug category config,
-# kdegraphics-thumbnailers = image previews in Dolphin, kde-l10n = UI translations.
+# konsole/dolphin/kate per system contract; spectacle, kinfocenter, kscreen are
+# basic daily-driver pieces. kfind/kcalc/kdialog/filelight are tiny utilities.
 RUN dnf -y install \
         konsole \
         dolphin \
@@ -102,26 +94,17 @@ RUN dnf -y install \
         spectacle \
         kinfocenter \
         kwalletmanager5 \
-        krdp \
         kio-extras \
         kio-admin \
         kio-fuse \
-        kio-gdrive \
         kdnssd \
-        kamera \
         kdegraphics-thumbnailers \
         kdenetwork-filesharing \
-        kde-connect \
-        kde-partitionmanager \
         kscreen \
-        kdebugsettings \
-        kjournald \
-        kunifiedpush \
-        kde-l10n \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 6) Desktop extras (system frameworks pulled in by KDE apps)
+# 7) Desktop extras (system frameworks pulled in by KDE apps)
 # ---------------------------------------------------------------------------
 # kde-settings-pulseaudio wires KDE audio defaults; libappindicator-gtk3 gives
 # systray icons for Electron apps.
@@ -138,17 +121,14 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 7) Fonts
+# 8) Fonts
 # ---------------------------------------------------------------------------
 # Base image ships the Noto/DejaVu/Adwaita core; all locale default-fonts-*
-# subpackages come with it. Explicitly kept: classic fallback families, the
-# CJK pair, emoji, the personal typing fonts, plus a dedicated terminal font.
+# subpackages come with it. CJK pair intentionally dropped (unused, ~200MB).
 RUN dnf -y install \
         liberation-fonts-all \
         google-noto-sans-fonts \
         google-noto-serif-fonts \
-        google-noto-sans-cjk-vf-fonts \
-        google-noto-serif-cjk-vf-fonts \
         google-noto-color-emoji-fonts \
         rit-meera-new-fonts \
         rit-rachana-fonts \
@@ -156,12 +136,11 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 8) Input (ibus)
+# 9) Input (ibus)
 # ---------------------------------------------------------------------------
 # Kept engine-agnostic: ibus + m17n (covers AS/multi-script schemes) and the
 # typing-booster character predictor. ibus-gtk4 is required for input methods
-# to work inside GTK4 apps. CJK engines (anthy, chewing, hangul, libpinyin,
-# table-* ) intentionally excluded.
+# to work inside GTK4 apps. CJK engines intentionally excluded.
 RUN dnf -y install \
         ibus \
         ibus-gtk4 \
@@ -172,7 +151,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 9) Audio stack
+# 10) Audio stack
 # ---------------------------------------------------------------------------
 # instances pulse out of plasma-pa; pulseaudio-utils gives pactl/padsp for CLI.
 # phonon(+vlc backend) is the KDE media framework some widgets/apps use.
@@ -187,7 +166,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 10) Plymouth boot splash
+# 11) Plymouth boot splash
 # ---------------------------------------------------------------------------
 # Basics + the Breeze theme to match the desktop. plymouth-system-theme pulls
 # the plugin/graphic-libs set; the kargs side lives in plymouth.toml (rhgb quiet).
@@ -200,7 +179,15 @@ RUN dnf -y install \
 RUN plymouth-set-default-theme breeze
 
 # ---------------------------------------------------------------------------
-# 11) Hardware support — kernel modules, firmware, boot tooling
+# 12) Nix store (bind mounted from /var/nix at boot)
+# ---------------------------------------------------------------------------
+# /var/nix lives on the mutable part of the disk; /nix is read-only in a bootc
+# image, so the persistent store is bind mounted in by nix.mount.
+# start-nix-socket.service then daemon-reloads and starts nix-daemon.socket.
+RUN mkdir -p /nix
+
+# ---------------------------------------------------------------------------
+# 13) Hardware support — kernel modules, firmware, boot tooling
 # ---------------------------------------------------------------------------
 # kernel-modules-extra: additional filesystem/net/misc modules for wider hw.
 # iwlwifi-*: Intel Wi-Fi firmware (mvm = modern, dvm = older, mld = newest gen).
@@ -230,7 +217,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 12) Media, imaging & personal apps
+# 14) Media, imaging & personal apps
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         helium-bin \
@@ -245,20 +232,15 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 13) Network — core, wifi/bluetooth/wwan, VPN
+# 15) Network — core, wifi/bluetooth/wwan
 # ---------------------------------------------------------------------------
+# VPN plugins/KCMs intentionally excluded (not used; add via /nix if needed).
 RUN dnf -y install \
         NetworkManager \
         NetworkManager-wifi \
         NetworkManager-bluetooth \
         NetworkManager-wwan \
         NetworkManager-config-connectivity-fedora \
-        NetworkManager-openvpn \
-        NetworkManager-openconnect \
-        NetworkManager-pptp \
-        NetworkManager-l2tp \
-        NetworkManager-libreswan \
-        vpnc-script \
         openssh-server \
         openssh-clients \
         bind-utils \
@@ -267,7 +249,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 14) Bluetooth extras (explicit per system requirement)
+# 16) Bluetooth extras (explicit per system requirement)
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         bluez \
@@ -283,7 +265,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 15) Containers
+# 17) Containers
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         docker-ce \
@@ -298,7 +280,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 16) Printing & scanning
+# 18) Printing & scanning
 # ---------------------------------------------------------------------------
 # cups-pk-helper = privileged print-config helper, system-config-printer-udev =
 # udev hotplug for USB printers, gutenprint = extra printer driver coverage.
@@ -319,7 +301,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 17) Filesystem & storage tools
+# 19) Filesystem & storage tools
 # ---------------------------------------------------------------------------
 # udisks2-btrfs + libblockdev-btrfs add btrfs support to the udisks/KDE stack,
 # compsize is a btrfs compression analyzer.
@@ -344,7 +326,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 18) System services & power/security
+# 20) System services & power/security
 # ---------------------------------------------------------------------------
 # cronie(+anacron)/crontabs = scheduling, audit(+rules) = security logging.
 # Both are enabled in the services step below.
@@ -374,58 +356,40 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 19) Developer tools
+# 21) Shells & rescue tools — dev tooling comes from /nix
 # ---------------------------------------------------------------------------
+# Compilers/build systems/kernel headers intentionally excluded. git is kept:
+# Nix flakes/home-manager fetch sources with it. nano is the TTY rescue editor.
 RUN dnf -y install \
-        git \
-        vim-enhanced \
-        nano \
         zsh \
-        gcc \
-        gcc-c++ \
-        make \
-        ninja-build \
-        glibc-devel \
-        kernel-headers \
+        git \
+        nano \
+        kernel-headers
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 20) CLI utilities
+# 22) CLI utilities (rescue kit — everything else comes via /nix)
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         btop \
         fastfetch \
-        fzf \
-        ripgrep \
-        bat \
-        fd-find \
-        eza \
         jq \
-        zoxide \
-        plocate \
         tree \
         bc \
         rsync \
-        socat \
-        nmap-ncat \
-        tcpdump \
-        traceroute \
-        mtr \
-        dos2unix \
         7zip \
         zip \
-        unar \
         wget2 \
         curl \
         which \
         sudo \
         lsof \
-        ImageMagick \
-        ImageMagick-libs \
+        plocate \
+        tar \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 21) Vulkan & graphics CLI
+# 23) Vulkan & graphics CLI
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         vulkan-tools \
@@ -434,7 +398,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 22) i18n / locale
+# 24) i18n / locale
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         glibc-all-langpacks \
@@ -443,7 +407,9 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 23) Enable Services
+# 25) Enable Services
 # ---------------------------------------------------------------------------
 RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service crond.service auditd.service -f
 
+# Testing
+RUN rpm -qa --queryformat='%{NAME} \n' | sort -u
