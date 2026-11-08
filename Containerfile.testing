@@ -342,3 +342,6 @@ RUN dnf -y install \
 # 21) Enable Services
 # ---------------------------------------------------------------------------
 RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service -f
+
+# Testing 
+RUN rpm -qa --queryformat='%{NAME} \n' | sort -u
