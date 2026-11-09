@@ -418,7 +418,7 @@ RUN rm -rf \
         /var/log/dnf5.log* \
         /var/lib/dnf \
         /var/lib/flatpak/repo/tmp \
-    && find /run -mindepth 1 ! -path '/run/systemd*' -exec rm -rf {} +
+    && find /run -mindepth 1 ! -path '/run/systemd*' ! -name '.containerenv' -exec rm -rf {} +
 
 # ---------------------------------------------------------------------------
 # 27) Bootc conformance lint (bluefin/template pattern)
