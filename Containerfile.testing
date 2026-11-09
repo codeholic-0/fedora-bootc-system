@@ -72,6 +72,7 @@ RUN dnf -y install \
         pam-kwallet \
         plasma-login-manager \
         kcm-plasmalogin \
+        --exclude=plasma-welcome,plasma-discover \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
@@ -254,17 +255,24 @@ RUN dnf -y install \
 # ---------------------------------------------------------------------------
 # 16) Containers
 # ---------------------------------------------------------------------------
+# podman is also what distrobox uses under the hood. distrobox is an EXPLICIT
+# dev dependency: the appliance image carries no dev toolchain — the dev
+# userland (compilers, language SDKs) lives in distrobox containers.
+# The proper unfiltered flathub remote is added explicitly:
+# fedora-flathub-remote only refs Fedora's filtered view.
 RUN dnf -y install \
         docker-ce \
         docker-compose-plugin \
         docker-buildx-plugin \
         podman \
         podman-compose \
+        distrobox \
         flatpak \
         fedora-flathub-remote \
         fedora-workstation-repositories \
         fedora-third-party \
-    && dnf clean all
+    && dnf clean all \
+    && flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 # ---------------------------------------------------------------------------
 # 17) Printing & scanning
