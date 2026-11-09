@@ -132,6 +132,12 @@ jobs:
         with:
           cosign-release: 'v3.1.4'
 
+      - name: Log in to GHCR (docker client, for cosign)
+        # cosign uses its own credential chain (~/.docker/config.json), NOT
+        # podman's authfile — without this the signature upload gets UNAUTHORIZED.
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Sign minimal image
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
@@ -209,6 +215,12 @@ jobs:
         with:
           cosign-release: 'v3.1.4'
 
+      - name: Log in to GHCR (docker client, for cosign)
+        # cosign uses its own credential chain (~/.docker/config.json), NOT
+        # podman's authfile — without this the signature upload gets UNAUTHORIZED.
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Sign testing image
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
@@ -284,6 +296,12 @@ jobs:
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           cosign-release: 'v3.1.4'
+
+      - name: Log in to GHCR (docker client, for cosign)
+        # cosign uses its own credential chain (~/.docker/config.json), NOT
+        # podman's authfile — without this the signature upload gets UNAUTHORIZED.
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Sign final image
         env:
