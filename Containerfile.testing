@@ -411,12 +411,14 @@ COPY registries.d/zen-bootc.yaml /etc/containers/registries.d/zen-bootc.yaml
 # Without `dnf clean all` (removed for cache mounts), dnf/flatpak leave
 # runtime-only state in the image: logfiles, repo counters, tmp caches.
 # /run gets stray cachefiles too. All runtime-only dirs are ignored by
-# bootc but produce lint warnings; /var content is real bloat.
+# bootc but produce lint warnings; /var content is real bloat. /run must
+# EXCLUDE /run/systemd — buildah bind-mounts DNS files there (stub-resolv
+# .conf), and rm on a mount point fails with "Device or resource busy".
 RUN rm -rf \
         /var/log/dnf5.log* \
         /var/lib/dnf \
         /var/lib/flatpak/repo/tmp \
-        /run/*
+    && find /run -mindepth 1 ! -path '/run/systemd*' -exec rm -rf {} +
 
 # ---------------------------------------------------------------------------
 # 27) Bootc conformance lint (bluefin/template pattern)
