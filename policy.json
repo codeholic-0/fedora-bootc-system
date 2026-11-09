@@ -9,7 +9,7 @@
       "ghcr.io/codeholic-0/zen-bootc": [
         {
           "type": "sigstoreSigned",
-          "keyPath": "/usr/etc/containers/cosign.pub",
+          "keyPath": "/usr/share/containers/cosign.pub",
           "signedIdentity": {
             "type": "matchRepository"
           }

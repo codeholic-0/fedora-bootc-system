@@ -390,22 +390,37 @@ RUN systemctl enable NetworkManager.service plasmalogin.service docker.service e
 # ---------------------------------------------------------------------------
 # 25) Client-side signature verification (policy.json + cosign.pub)
 # ---------------------------------------------------------------------------
-# /usr/etc/containers/ is the /etc merge source on bootc systems, so this
-# becomes /etc/containers/policy.json on deployed machines. Scoped: only OUR
-# repo requires a valid sigstoreSigned signature (key = committed cosign.pub);
-# everything else stays default-allow so distrobox/dev pulls are unaffected.
-# signedIdentity=matchRepository is REQUIRED for cosign signatures (cosign
-# signs the repository, not the exact tag — per containers-policy.json(5)).
-# registries.d enables .sig attachment download for ghcr.io; without it the
-# sigstoreSigned check silently fails.
-RUN mkdir -p /usr/etc/containers /usr/etc/containers/registries.d
-COPY policy.json /usr/etc/containers/policy.json
-COPY cosign.pub /usr/etc/containers/cosign.pub
-COPY registries.d/zen-bootc.yaml /usr/etc/containers/registries.d/zen-bootc.yaml
+# NOTE: policy.json + registries.d live in /etc/containers/ (the standard,
+# bootc-supported location — /usr/etc is an unsupported implementation
+# detail, rejected by `bootc container lint`). The pubkey lives in
+# /usr/share/containers/ and is referenced by keyPath. Scoped: only OUR
+# repo requires a valid sigstoreSigned signature (key = committed
+# cosign.pub); everything else stays default-allow so distrobox/dev pulls
+# are unaffected. signedIdentity=matchRepository is REQUIRED for cosign
+# signatures (cosign signs the repository, not the exact tag — per
+# containers-policy.json(5)). registries.d enables .sig attachment
+# download for ghcr.io; without it the sigstoreSigned check silently fails.
+RUN mkdir -p /etc/containers/registries.d /usr/share/containers
+COPY policy.json /etc/containers/policy.json
+COPY cosign.pub /usr/share/containers/cosign.pub
+COPY registries.d/zen-bootc.yaml /etc/containers/registries.d/zen-bootc.yaml
 
 # ---------------------------------------------------------------------------
-# 26) Bootc conformance lint (bluefin/template pattern)
+# 26) Build-hygiene cleanup (required for the lint below to be meaningful)
 # ---------------------------------------------------------------------------
-# Fails the build if the image violates bootc's contract (required files,
-# units, kargs). Runs after all content changes.
+# Without `dnf clean all` (removed for cache mounts), dnf/flatpak leave
+# runtime-only state in the image: logfiles, repo counters, tmp caches.
+# /run gets stray cachefiles too. All runtime-only dirs are ignored by
+# bootc but produce lint warnings; /var content is real bloat.
+RUN rm -rf \
+        /var/log/dnf5.log* \
+        /var/lib/dnf \
+        /var/lib/flatpak/repo/tmp \
+        /run/*
+
+# ---------------------------------------------------------------------------
+# 27) Bootc conformance lint (bluefin/template pattern)
+# ---------------------------------------------------------------------------
+# Fails the build on hard contract violations (etc-usretc etc.). Warnings
+# for missing tmpfiles.d entries are tolerated.
 RUN bootc container lint

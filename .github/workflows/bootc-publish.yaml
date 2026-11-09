@@ -101,23 +101,11 @@ jobs:
             # stable and latest are the same image; one extra ref, not an extra build
             extra_tags: "latest"
     steps:
-      - name: Maximize build space
-        # Rechunking makes a full copy of the image; the ~10GB images need the
-        # runner pruned first (same recipe the ublue templates use).
-        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
-
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Install podman
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y podman
-
       - name: Decide whether to run
         # Job-level `if` cannot use the matrix context, so the per-flavor gate
-        # lives in a step instead. schedule = all flavors; push = paths-filter;
-        # dispatch = only the explicitly toggled inputs.
+        # lives in a step instead — and MUST be the first step so skipped
+        # flavors don't pay for pruning/checkout/podman-install. Needs only
+        # needs.changes outputs + event context; no checkout required.
         id: gate
         env:
           ROLE: ${{ matrix.flavor.role }}
@@ -138,6 +126,22 @@ jobs:
             workflow_dispatch) [[ "${TOGGLED}" == "true" ]] && SHOULD_RUN=true ;;
           esac
           echo "SHOULD_RUN=${SHOULD_RUN:-false}" >> "$GITHUB_ENV"
+
+      - name: Maximize build space
+        # Rechunking makes a full copy of the image; the ~10GB images need the
+        # runner pruned first (same recipe the ublue templates use).
+        if: env.SHOULD_RUN == 'true'
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
+      - name: Checkout code
+        if: env.SHOULD_RUN == 'true'
+        uses: actions/checkout@v5
+
+      - name: Install podman
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
 
       - name: Log in to GHCR
         # Built-in GITHUB_TOKEN (job's packages:write scope) — no PAT needed.
