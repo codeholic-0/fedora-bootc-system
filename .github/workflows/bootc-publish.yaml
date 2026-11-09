@@ -26,6 +26,9 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/${{ github.repository_owner }}/zen-bootc
+  # Distro-agnostic rechunker (coreos/chunkah). Alternative (needs rpm-ostree
+  # inside the image): rpm-ostree compose build-chunked-oci --bootc.
+  RECHUNK_IMAGE: quay.io/coreos/chunkah:latest
 
 # Cancel superseded runs of this workflow on the same branch to avoid
 # burning build+push minutes on outdated commits.
@@ -68,6 +71,11 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Maximize build space
+        # Rechunking makes a full copy of the image; the ~10GB testing/final
+        # images need the runner pruned first (same recipe the ublue templates use).
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
       - name: Checkout code
         uses: actions/checkout@v5
 
@@ -86,10 +94,53 @@ jobs:
           IMAGE="${IMAGE,,}"
           podman build -f Containerfile.minimal -t "$IMAGE:minimal-latest" .
 
+      - name: Rechunk image (small delta updates)
+        run: |
+          set -euox pipefail
+          IMAGE="${IMAGE,,}"
+          CHUNKAH_CONFIG_FILE="$(mktemp)"
+          CHUNKAH_OUTPUT_DIR="$(mktemp -d "${WORKSPACE:-/tmp}"/zen-bootc-chunkah-XXXXXX)"
+          podman inspect "$IMAGE:minimal-latest" > "$CHUNKAH_CONFIG_FILE"
+
+          podman run --rm \
+            --mount=type=image,src="$IMAGE:minimal-latest",target=/chunkah \
+            -v "$CHUNKAH_CONFIG_FILE:/chunkah-config.json:ro,Z" \
+            -v "$CHUNKAH_OUTPUT_DIR:/run/out:Z" \
+            "$RECHUNK_IMAGE" \
+            build \
+            --verbose \
+            --compressed \
+            --max-layers 128 \
+            --prune /sysroot/ \
+            --label ostree.commit- --label ostree.final-diffid- \
+            --config /chunkah-config.json \
+            --output oci:/run/out/chunked
+
+          # Replace the unchunked local tag with the chunked image
+          CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
+          podman untag "$IMAGE:minimal-latest" || true
+          podman tag "$CHUNKED_IMAGE" "$IMAGE:minimal-latest"
+
       - name: Push minimal image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push "$IMAGE:minimal-latest"
+          podman push --digestfile=/tmp/digestfile "$IMAGE:minimal-latest"
+
+      - name: Install Cosign
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: 'v3.1.4'
+
+      - name: Sign minimal image
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          IMAGE="${IMAGE,,}"
+          # Key-based signing is done against the pushed digest, not the tag.
+          # Requires the SIGNING_SECRET repo secret (cosign private key).
+          cosign sign -y --new-bundle-format=false --use-signing-config=false \
+            --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
 
   build-testing:
     if: needs.changes.outputs.testing == 'true' || github.event.inputs.testing == 'true'
@@ -99,6 +150,9 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
       - name: Checkout code
         uses: actions/checkout@v5
 
@@ -117,10 +171,51 @@ jobs:
           IMAGE="${IMAGE,,}"
           podman build -f Containerfile.testing -t "$IMAGE:testing" .
 
+      - name: Rechunk image (small delta updates)
+        run: |
+          set -euox pipefail
+          IMAGE="${IMAGE,,}"
+          CHUNKAH_CONFIG_FILE="$(mktemp)"
+          CHUNKAH_OUTPUT_DIR="$(mktemp -d "${WORKSPACE:-/tmp}"/zen-bootc-chunkah-XXXXXX)"
+          podman inspect "$IMAGE:testing" > "$CHUNKAH_CONFIG_FILE"
+
+          podman run --rm \
+            --mount=type=image,src="$IMAGE:testing",target=/chunkah \
+            -v "$CHUNKAH_CONFIG_FILE:/chunkah-config.json:ro,Z" \
+            -v "$CHUNKAH_OUTPUT_DIR:/run/out:Z" \
+            "$RECHUNK_IMAGE" \
+            build \
+            --verbose \
+            --compressed \
+            --max-layers 128 \
+            --prune /sysroot/ \
+            --label ostree.commit- --label ostree.final-diffid- \
+            --config /chunkah-config.json \
+            --output oci:/run/out/chunked
+
+          # Replace the unchunked local tag with the chunked image
+          CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
+          podman untag "$IMAGE:testing" || true
+          podman tag "$CHUNKED_IMAGE" "$IMAGE:testing"
+
       - name: Push testing image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push "$IMAGE:testing"
+          podman push --digestfile=/tmp/digestfile "$IMAGE:testing"
+
+      - name: Install Cosign
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: 'v3.1.4'
+
+      - name: Sign testing image
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          IMAGE="${IMAGE,,}"
+          cosign sign -y --new-bundle-format=false --use-signing-config=false \
+            --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
 
   build-final:
     if: needs.changes.outputs.final == 'true' || github.event.inputs.final == 'true'
@@ -130,6 +225,9 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
       - name: Checkout code
         uses: actions/checkout@v5
 
@@ -148,8 +246,50 @@ jobs:
           IMAGE="${IMAGE,,}"
           podman build -t "$IMAGE:stable" -t "$IMAGE:latest" .
 
+      - name: Rechunk image (small delta updates)
+        run: |
+          set -euox pipefail
+          IMAGE="${IMAGE,,}"
+          CHUNKAH_CONFIG_FILE="$(mktemp)"
+          CHUNKAH_OUTPUT_DIR="$(mktemp -d "${WORKSPACE:-/tmp}"/zen-bootc-chunkah-XXXXXX)"
+
+          # stable and latest point at the same local image; rechunk once and retag
+          podman inspect "$IMAGE:stable" > "$CHUNKAH_CONFIG_FILE"
+          podman run --rm \
+            --mount=type=image,src="$IMAGE:stable",target=/chunkah \
+            -v "$CHUNKAH_CONFIG_FILE:/chunkah-config.json:ro,Z" \
+            -v "$CHUNKAH_OUTPUT_DIR:/run/out:Z" \
+            "$RECHUNK_IMAGE" \
+            build \
+            --verbose \
+            --compressed \
+            --max-layers 128 \
+            --prune /sysroot/ \
+            --label ostree.commit- --label ostree.final-diffid- \
+            --config /chunkah-config.json \
+            --output oci:/run/out/chunked
+
+          CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
+          podman untag "$IMAGE:stable" || true
+          podman tag "$CHUNKED_IMAGE" "$IMAGE:stable" "$IMAGE:latest"
+
       - name: Push final image
         run: |
           IMAGE="${IMAGE,,}"
-          podman push "$IMAGE:stable"
-          podman push "$IMAGE:latest"
+          podman push --digestfile=/tmp/digestfile "$IMAGE:stable"
+          podman push --digestfile=/tmp/digestfile-latest "$IMAGE:latest"
+
+      - name: Install Cosign
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: 'v3.1.4'
+
+      - name: Sign final image
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          IMAGE="${IMAGE,,}"
+          # stable and latest resolve to the same digest; one signature covers both
+          cosign sign -y --new-bundle-format=false --use-signing-config=false \
+            --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
