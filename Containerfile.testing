@@ -53,8 +53,6 @@ RUN dnf -y install \
         kwin \
         plasma-desktop \
         plasma-workspace \
-        plasma-lookandfeel-fedora \
-        plasma-keyboard \
         plasma-thunderbolt \
         plasma-systemsettings \
         plasma-nm \
