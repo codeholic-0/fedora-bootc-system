@@ -317,7 +317,7 @@ RUN dnf -y install \
 # ---------------------------------------------------------------------------
 # cronie(+anacron)/crontabs = scheduling, audit(+rules) = security logging.
 # Both are enabled in the services step below.RUN dnf -y install \
-        firewalld \
+RUN dnf install -y firewalld \
         firewall-config \
         earlyoom \
         cronie \
