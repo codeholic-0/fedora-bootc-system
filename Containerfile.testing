@@ -4,6 +4,14 @@ ENV FEDORA_VER="45"
 # ---------------------------------------------------------------------------
 # 1) System-wide metadata
 # ---------------------------------------------------------------------------
+# OpenContainers OCI labels self-document the image on GHCR/tooling.
+LABEL org.opencontainers.image.title="zen-bootc" \
+      org.opencontainers.image.description="Personal Fedora 45 KDE bootc appliance: codecs, full hardware support, basic utilities; dev userland via distrobox" \
+      org.opencontainers.image.vendor="codeholic-0" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/codeholic-0/fedora-bootc-system" \
+      org.opencontainers.image.url="https://github.com/codeholic-0/fedora-bootc-system"
+
 # Keep the KDE product identity (swapped in with --allowerasing below).
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install --allowerasing \

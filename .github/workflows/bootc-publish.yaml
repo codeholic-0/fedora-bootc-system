@@ -33,7 +33,9 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/zen-bootc
   # Distro-agnostic rechunker (coreos/chunkah). Alternative (needs rpm-ostree
   # inside the image): rpm-ostree compose build-chunked-oci --bootc.
-  RECHUNK_IMAGE: quay.io/coreos/chunkah:latest
+  # Pinned by digest (template pattern: "pin once mature") so an upstream
+  # repush of :latest can't break the rechunk step. Bump deliberately.
+  RECHUNK_IMAGE: quay.io/coreos/chunkah@sha256:71e593421c5de7dcc7c8c5c50e98d3bac572055a76f399f61a491d123c20a523
 
 # Cancel superseded runs of this workflow on the same branch to avoid
 # burning build+push minutes on outdated commits.
@@ -240,3 +242,13 @@ jobs:
           # One signature on the digest covers every tag sharing it.
           cosign sign -y --new-bundle-format=false --use-signing-config=false \
             --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
+
+      - name: Verify signature (self-check)
+        # Close the loop: prove the digest we just pushed is verifiable with
+        # the committed public key, instead of trusting sign exit code.
+        if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE="${IMAGE,,}"
+          cosign verify --key cosign.pub \
+            --new-bundle-format=false --use-signing-config=false \
+            "$IMAGE@$(cat /tmp/digestfile)"
