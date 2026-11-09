@@ -420,3 +420,10 @@ RUN mkdir -p /usr/etc/containers /usr/etc/containers/registries.d
 COPY policy.json /usr/etc/containers/policy.json
 COPY cosign.pub /usr/etc/containers/cosign.pub
 COPY registries.d/zen-bootc.yaml /usr/etc/containers/registries.d/zen-bootc.yaml
+
+# ---------------------------------------------------------------------------
+# 26) Bootc conformance lint (bluefin/template pattern)
+# ---------------------------------------------------------------------------
+# Fails the build if the image violates bootc's contract (required files,
+# units, kargs). Runs after all content changes.
+RUN bootc container lint
