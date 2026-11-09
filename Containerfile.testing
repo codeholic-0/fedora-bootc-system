@@ -5,19 +5,20 @@ ENV FEDORA_VER="45"
 # 1) System-wide metadata
 # ---------------------------------------------------------------------------
 # Keep the KDE product identity (swapped in with --allowerasing below).
-RUN dnf -y install --allowerasing \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install --allowerasing \
         fedora-release-kde-desktop \
-        fedora-release-identity-kde-desktop \
-    && dnf clean all
-
+        fedora-release-identity-kde-desktop
 # ---------------------------------------------------------------------------
 # 2) dnf plugins & repos
 # ---------------------------------------------------------------------------
 # dnf-plugins-core FIRST: the bootc base has no dnf plugin packages, but the
 # copr/config-manager/setopt commands below all require them.
-RUN dnf -y install dnf-plugins-core dnf5-plugins
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install dnf-plugins-core dnf5-plugins
 
-RUN dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$FEDORA_VER.noarch.rpm" \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$FEDORA_VER.noarch.rpm" \
         "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$FEDORA_VER.noarch.rpm" \
     && dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo \
     && dnf copr enable imput/helium -y \
@@ -34,22 +35,21 @@ RUN dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-rel
 # (dnf5 "system repos"). bootc-image-builder's osbuild depsolver only reads the
 # classic /etc/yum.repos.d/, so copy the definitions over or anaconda-iso
 # builds fail with "No match for argument: <base package>".
-RUN cp /usr/share/dnf5/repos.d/*.repo /etc/yum.repos.d/ \
-    && dnf clean all
-
+RUN cp /usr/share/dnf5/repos.d/*.repo /etc/yum.repos.d/
 # ---------------------------------------------------------------------------
 # 4) Codecs & multimedia framework
 # ---------------------------------------------------------------------------
 # @multimedia pulls the full gstreamer plugin set + codec libs; nothing else
 # needed here. Everything listed below is plugin support, so one group.
-RUN dnf -y group install multimedia && dnf clean all
-
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y group install multimedia
 # ---------------------------------------------------------------------------
 # 5) KDE Plasma desktop (core, minimized)
 # ---------------------------------------------------------------------------
 # Irreducible core + the settings/UI modules that matter. Everything else is
 # dropped (userland comes from distrobox/home-manager style tooling).
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         kwin \
         plasma-desktop \
         plasma-workspace \
@@ -72,15 +72,14 @@ RUN dnf -y install \
         pam-kwallet \
         plasma-login-manager \
         kcm-plasmalogin \
-        --exclude=plasma-welcome,plasma-discover \
-    && dnf clean all
-
+        --exclude=plasma-welcome,plasma-discover
 # ---------------------------------------------------------------------------
 # 6) KDE applications (minimized)
 # ---------------------------------------------------------------------------
 # konsole/dolphin/kate per system contract; spectacle, kinfocenter, kscreen are
 # basic daily-driver pieces. kfind/kcalc/kdialog/filelight are tiny utilities.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         konsole \
         dolphin \
         dolphin-plugins \
@@ -99,15 +98,14 @@ RUN dnf -y install \
         kdnssd \
         kdegraphics-thumbnailers \
         kdenetwork-filesharing \
-        kscreen \
-    && dnf clean all
-
+        kscreen
 # ---------------------------------------------------------------------------
 # 7) Desktop extras (system frameworks pulled in by KDE apps)
 # ---------------------------------------------------------------------------
 # kde-settings-pulseaudio wires KDE audio defaults; libappindicator-gtk3 gives
 # systray icons for Electron apps.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         accountsservice \
         colord \
         colord-kde \
@@ -116,64 +114,59 @@ RUN dnf -y install \
         kde-settings \
         kde-settings-pulseaudio \
         libappindicator-gtk3 \
-        redhat-menus \
-    && dnf clean all
-
+        redhat-menus
 # ---------------------------------------------------------------------------
 # 8) Fonts
 # ---------------------------------------------------------------------------
 # Base image ships the Noto/DejaVu/Adwaita core; all locale default-fonts-*
 # subpackages come with it. CJK pair intentionally dropped (unused, ~200MB).
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         liberation-fonts-all \
         google-noto-sans-fonts \
         google-noto-serif-fonts \
         google-noto-color-emoji-fonts \
         rit-meera-new-fonts \
         rit-rachana-fonts \
-        source-foundry-hack-fonts \
-    && dnf clean all
-
+        source-foundry-hack-fonts
 # ---------------------------------------------------------------------------
 # 9) Input (ibus)
 # ---------------------------------------------------------------------------
 # Kept engine-agnostic: ibus + m17n (covers AS/multi-script schemes) and the
 # typing-booster character predictor. ibus-gtk4 is required for input methods
 # to work inside GTK4 apps. CJK engines intentionally excluded.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         ibus \
         ibus-gtk4 \
         ibus-m17n \
         ibus-typing-booster \
         langtable \
-        kxkb2locale1 \
-    && dnf clean all
-
+        kxkb2locale1
 # ---------------------------------------------------------------------------
 # 10) Audio stack
 # ---------------------------------------------------------------------------
 # instances pulse out of plasma-pa; pulseaudio-utils gives pactl/padsp for CLI.
 # phonon(+vlc backend) is the KDE media framework some widgets/apps use.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         wireplumber \
         pulseaudio-utils \
         alsa-utils \
         alsa-ucm \
         alsa-sof-firmware \
         phonon-qt6 \
-        phonon-qt6-backend-vlc \
-    && dnf clean all
-
+        phonon-qt6-backend-vlc
 # ---------------------------------------------------------------------------
 # 11) Plymouth boot splash
 # ---------------------------------------------------------------------------
 # Basics + the Breeze theme to match the desktop. plymouth-system-theme pulls
 # the plugin/graphic-libs set; the kargs side lives in plymouth.toml (rhgb quiet).
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         plymouth \
         plymouth-system-theme \
-        plymouth-theme-breeze \
-    && dnf clean all
+        plymouth-theme-breeze
 
 RUN plymouth-set-default-theme breeze
 
@@ -188,7 +181,8 @@ RUN plymouth-set-default-theme breeze
 # usb_modeswitch: mode-switching for 3G/4G WWAN USB dongles.
 # mcelog: CPU machine-check error reporting. grubby/grub2-tools: kernel arg
 # management; zram-generator-defaults supplies the default zram config.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         kernel-modules-extra \
         iwlwifi-mvm-firmware \
         iwlwifi-dvm-firmware \
@@ -204,26 +198,24 @@ RUN dnf -y install \
         grubby \
         grub2-tools-extra \
         grub2-efi-x64-modules \
-        zram-generator-defaults \
-    && dnf clean all
-
+        zram-generator-defaults
 # ---------------------------------------------------------------------------
 # 13) Media & personal apps (no browser/persepolis/keepassxc — flatpak/distrobox territory)
 # ---------------------------------------------------------------------------
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         mediawriter \
         gthumb \
         yt-dlp \
         vlc \
         zenity \
-        guvcview \
-    && dnf clean all
-
+        guvcview
 # ---------------------------------------------------------------------------
 # 14) Network — core, wifi/bluetooth/wwan
 # ---------------------------------------------------------------------------
 # VPN plugins/KCMs intentionally excluded (not used; install per-machine if needed).
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         NetworkManager \
         NetworkManager-wifi \
         NetworkManager-bluetooth \
@@ -233,13 +225,12 @@ RUN dnf -y install \
         openssh-clients \
         bind-utils \
         ethtool \
-        iw \
-    && dnf clean all
-
+        iw
 # ---------------------------------------------------------------------------
 # 15) Bluetooth extras (explicit per system requirement)
 # ---------------------------------------------------------------------------
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         bluez \
         bluez-obexd \
         iwlbluetooth-firmware \
@@ -249,9 +240,7 @@ RUN dnf -y install \
         mt7xxx-firmware \
         iwlegacy-firmware \
         realtek-firmware \
-        wireless-regdb \
-    && dnf clean all
-
+        wireless-regdb
 # ---------------------------------------------------------------------------
 # 16) Containers
 # ---------------------------------------------------------------------------
@@ -260,7 +249,8 @@ RUN dnf -y install \
 # userland (compilers, language SDKs) lives in distrobox containers.
 # The proper unfiltered flathub remote is added explicitly:
 # fedora-flathub-remote only refs Fedora's filtered view.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         docker-ce \
         docker-compose-plugin \
         docker-buildx-plugin \
@@ -271,7 +261,6 @@ RUN dnf -y install \
         fedora-flathub-remote \
         fedora-workstation-repositories \
         fedora-third-party \
-    && dnf clean all \
     && flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 # ---------------------------------------------------------------------------
@@ -279,7 +268,8 @@ RUN dnf -y install \
 # ---------------------------------------------------------------------------
 # cups-pk-helper = privileged print-config helper, system-config-printer-udev =
 # udev hotplug for USB printers, gutenprint = extra printer driver coverage.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         cups \
         cups-filters \
         cups-filters-driverless \
@@ -292,15 +282,14 @@ RUN dnf -y install \
         sane-backends \
         sane-airscan \
         ipp-usb \
-        ghostscript \
-    && dnf clean all
-
+        ghostscript
 # ---------------------------------------------------------------------------
 # 18) Filesystem & storage tools
 # ---------------------------------------------------------------------------
 # udisks2-btrfs + libblockdev-btrfs add btrfs support to the udisks/KDE stack,
 # compsize is a btrfs compression analyzer.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         btrfs-progs \
         udisks2-btrfs \
         libblockdev-btrfs \
@@ -317,15 +306,14 @@ RUN dnf -y install \
         fuse-sshfs \
         cifs-utils \
         samba \
-        samba-usershares \
-    && dnf clean all
-
+        samba-usershares
 # ---------------------------------------------------------------------------
 # 19) System services & power/security
 # ---------------------------------------------------------------------------
 # cronie(+anacron)/crontabs = scheduling, audit(+rules) = security logging.
-# Both are enabled in the services step below.RUN dnf -y install \
-RUN dnf install -y firewalld \
+# Both are enabled in the services step below.
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf install -y firewalld \
         firewall-config \
         earlyoom \
         cronie \
@@ -346,25 +334,23 @@ RUN dnf install -y firewalld \
         bluez-cups \
         fprintd \
         pcsc-lite \
-        opensc \
-    && dnf clean all
-
+        opensc
 # ---------------------------------------------------------------------------
 # 20) Shells & rescue tools — heavy dev tooling lives in distrobox, not the image
 # ---------------------------------------------------------------------------
 # Compilers/build systems/kernel headers intentionally excluded. git is kept:
 # it's useful for debugging/troubleshooting on the host. nano is the TTY rescue
 # editor; zsh is the user's default shell choice.
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         zsh \
         git \
-        nano \
-    && dnf clean all
-
+        nano
 # ---------------------------------------------------------------------------
 # 21) CLI utilities (rescue kit — heavier tooling comes via distrobox)
 # ---------------------------------------------------------------------------
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         btop \
         fastfetch \
         jq \
@@ -379,27 +365,23 @@ RUN dnf -y install \
         sudo \
         lsof \
         plocate \
-        tar \
-    && dnf clean all
-
+        tar
 # ---------------------------------------------------------------------------
 # 22) Vulkan & graphics CLI
 # ---------------------------------------------------------------------------
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         vulkan-tools \
         glx-utils \
-        libva-utils \
-    && dnf clean all
-
+        libva-utils
 # ---------------------------------------------------------------------------
 # 23) i18n / locale
 # ---------------------------------------------------------------------------
-RUN dnf -y install \
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         glibc-all-langpacks \
         hunspell \
-        hunspell-en \
-    && dnf clean all
-
+        hunspell-en
 # ---------------------------------------------------------------------------
 # 24) Enable Services
 # ---------------------------------------------------------------------------
