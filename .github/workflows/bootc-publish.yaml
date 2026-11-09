@@ -7,7 +7,12 @@ on:
       - "Containerfile"
       - "Containerfile.testing"
       - "Containerfile.minimal"
+      - "policy.json"
       - ".github/workflows/bootc-publish.yaml"
+  # Weekly rebuild: tracks Fedora 45 package/base updates without any commits.
+  # 18:05 UTC Saturday (off-peak offset from the hour).
+  schedule:
+    - cron: "5 18 * * 6"
   workflow_dispatch:
     inputs:
       minimal:
@@ -38,7 +43,8 @@ concurrency:
 
 jobs:
   changes:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Scheduled runs always build everything; push/dispatch filter by paths.
+    if: github.event_name == 'schedule' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,10 +67,11 @@ jobs:
               - 'Containerfile.testing'
             final:
               - 'Containerfile'
+              - 'policy.json'
               - '.github/workflows/bootc-publish.yaml'
 
   build-minimal:
-    if: needs.changes.outputs.minimal == 'true' || github.event.inputs.minimal == 'true'
+    if: needs.changes.outputs.minimal == 'true' || github.event_name == 'schedule' || github.event.inputs.minimal == 'true'
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -92,7 +99,11 @@ jobs:
       - name: Build minimal image
         run: |
           IMAGE="${IMAGE,,}"
-          podman build -f Containerfile.minimal -t "$IMAGE:minimal-latest" .
+          # --pull=newer re-checks the base manifest each build (this is what
+          # makes the weekly schedule pick up Fedora package/base updates).
+          podman build --pull=newer -f Containerfile.minimal -t "$IMAGE:minimal-latest" .
+          # Immutable audit/rollback anchor: testing-<UTC date>-<commit sha7>.
+          echo "DTAG=$IMAGE:minimal-$(date -u +%Y%m%d)-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
 
       - name: Rechunk image (small delta updates)
         run: |
@@ -119,12 +130,13 @@ jobs:
           # Replace the unchunked local tag with the chunked image
           CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
           podman untag "$IMAGE:minimal-latest" || true
-          podman tag "$CHUNKED_IMAGE" "$IMAGE:minimal-latest"
+          podman tag "$CHUNKED_IMAGE" "$IMAGE:minimal-latest" "$DTAG"
 
       - name: Push minimal image
         run: |
           IMAGE="${IMAGE,,}"
           podman push --digestfile=/tmp/digestfile "$IMAGE:minimal-latest"
+          podman push --digestfile=/tmp/digestfile "$DTAG"
 
       - name: Install Cosign
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
@@ -149,7 +161,7 @@ jobs:
             --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
 
   build-testing:
-    if: needs.changes.outputs.testing == 'true' || github.event.inputs.testing == 'true'
+    if: needs.changes.outputs.testing == 'true' || github.event_name == 'schedule' || github.event.inputs.testing == 'true'
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -175,7 +187,11 @@ jobs:
       - name: Build testing image
         run: |
           IMAGE="${IMAGE,,}"
-          podman build -f Containerfile.testing -t "$IMAGE:testing" .
+          # --pull=newer re-checks the base manifest each build (this is what
+          # makes the weekly schedule pick up Fedora package/base updates).
+          podman build --pull=newer -f Containerfile.testing -t "$IMAGE:testing" .
+          # Immutable rollback anchor: testing-<UTC date>-<commit sha7>.
+          echo "DTAG=$IMAGE:testing-$(date -u +%Y%m%d)-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
 
       - name: Rechunk image (small delta updates)
         run: |
@@ -202,12 +218,13 @@ jobs:
           # Replace the unchunked local tag with the chunked image
           CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
           podman untag "$IMAGE:testing" || true
-          podman tag "$CHUNKED_IMAGE" "$IMAGE:testing"
+          podman tag "$CHUNKED_IMAGE" "$IMAGE:testing" "$DTAG"
 
       - name: Push testing image
         run: |
           IMAGE="${IMAGE,,}"
           podman push --digestfile=/tmp/digestfile "$IMAGE:testing"
+          podman push --digestfile=/tmp/digestfile "$DTAG"
 
       - name: Install Cosign
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
@@ -230,7 +247,7 @@ jobs:
             --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
 
   build-final:
-    if: needs.changes.outputs.final == 'true' || github.event.inputs.final == 'true'
+    if: needs.changes.outputs.final == 'true' || github.event_name == 'schedule' || github.event.inputs.final == 'true'
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -256,7 +273,11 @@ jobs:
       - name: Build final image
         run: |
           IMAGE="${IMAGE,,}"
-          podman build -t "$IMAGE:stable" -t "$IMAGE:latest" .
+          # --pull=newer re-checks the base manifest each build (this is what
+          # makes the weekly schedule pick up Fedora package/base updates).
+          podman build --pull=newer -t "$IMAGE:stable" -t "$IMAGE:latest" .
+          # Immutable rollback anchor: stable-<UTC date>-<commit sha7>.
+          echo "DTAG=$IMAGE:stable-$(date -u +%Y%m%d)-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
 
       - name: Rechunk image (small delta updates)
         run: |
@@ -283,13 +304,14 @@ jobs:
 
           CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
           podman untag "$IMAGE:stable" || true
-          podman tag "$CHUNKED_IMAGE" "$IMAGE:stable" "$IMAGE:latest"
+          podman tag "$CHUNKED_IMAGE" "$IMAGE:stable" "$IMAGE:latest" "$DTAG"
 
       - name: Push final image
         run: |
           IMAGE="${IMAGE,,}"
           podman push --digestfile=/tmp/digestfile "$IMAGE:stable"
-          podman push --digestfile=/tmp/digestfile-latest "$IMAGE:latest"
+          podman push --digestfile=/tmp/digestfile "$IMAGE:latest"
+          podman push --digestfile=/tmp/digestfile "$DTAG"
 
       - name: Install Cosign
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'

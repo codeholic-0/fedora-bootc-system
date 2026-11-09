@@ -405,5 +405,18 @@ RUN dnf -y install \
 # ---------------------------------------------------------------------------
 RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service crond.service auditd.service -f
 
-# Testing
-RUN rpm -qa --queryformat='%{NAME} \n' | sort -u
+# ---------------------------------------------------------------------------
+# 25) Client-side signature verification (policy.json + cosign.pub)
+# ---------------------------------------------------------------------------
+# /usr/etc/containers/ is the /etc merge source on bootc systems, so this
+# becomes /etc/containers/policy.json on deployed machines. Scoped: only OUR
+# repo requires a valid sigstoreSigned signature (key = committed cosign.pub);
+# everything else stays default-allow so distrobox/dev pulls are unaffected.
+# signedIdentity=matchRepository is REQUIRED for cosign signatures (cosign
+# signs the repository, not the exact tag — per containers-policy.json(5)).
+# registries.d enables .sig attachment download for ghcr.io; without it the
+# sigstoreSigned check silently fails.
+RUN mkdir -p /usr/etc/containers /usr/etc/containers/registries.d
+COPY policy.json /usr/etc/containers/policy.json
+COPY cosign.pub /usr/etc/containers/cosign.pub
+COPY registries.d/zen-bootc.yaml /usr/etc/containers/registries.d/zen-bootc.yaml

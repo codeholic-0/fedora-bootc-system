@@ -1,0 +1,6 @@
+# containers-registries.d snippet: opt ghcr.io cosign signatures in.
+# Without this, containers/image does not even download .sig attachments
+# for the registry and the policy.json sigstoreSigned check fails.
+docker:
+  ghcr.io:
+    use-sigstore-attachments: true
