@@ -48,7 +48,7 @@ RUN dnf -y group install multimedia && dnf clean all
 # 5) KDE Plasma desktop (core, minimized)
 # ---------------------------------------------------------------------------
 # Irreducible core + the settings/UI modules that matter. Everything else is
-# dropped in favor of /nix (home-manager) or being simply unused.
+# dropped (userland comes from distrobox/home-manager style tooling).
 RUN dnf -y install \
         kwin \
         plasma-desktop \
@@ -179,15 +179,7 @@ RUN dnf -y install \
 RUN plymouth-set-default-theme breeze
 
 # ---------------------------------------------------------------------------
-# 12) Nix store (bind mounted from /var/nix at boot)
-# ---------------------------------------------------------------------------
-# /var/nix lives on the mutable part of the disk; /nix is read-only in a bootc
-# image, so the persistent store is bind mounted in by nix.mount.
-# start-nix-socket.service then daemon-reloads and starts nix-daemon.socket.
-RUN mkdir -p /nix
-
-# ---------------------------------------------------------------------------
-# 13) Hardware support — kernel modules, firmware, boot tooling
+# 12) Hardware support — kernel modules, firmware, boot tooling
 # ---------------------------------------------------------------------------
 # kernel-modules-extra: additional filesystem/net/misc modules for wider hw.
 # iwlwifi-*: Intel Wi-Fi firmware (mvm = modern, dvm = older, mld = newest gen).
@@ -217,24 +209,21 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 14) Media, imaging & personal apps
+# 13) Media & personal apps (no browser/persepolis/keepassxc — flatpak/distrobox territory)
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
-        helium-bin \
-        persepolis \
         mediawriter \
-        keepassxc \
-        vlc \
         gthumb \
         yt-dlp \
+        vlc \
         zenity \
         guvcview \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 15) Network — core, wifi/bluetooth/wwan
+# 14) Network — core, wifi/bluetooth/wwan
 # ---------------------------------------------------------------------------
-# VPN plugins/KCMs intentionally excluded (not used; add via /nix if needed).
+# VPN plugins/KCMs intentionally excluded (not used; install per-machine if needed).
 RUN dnf -y install \
         NetworkManager \
         NetworkManager-wifi \
@@ -249,7 +238,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 16) Bluetooth extras (explicit per system requirement)
+# 15) Bluetooth extras (explicit per system requirement)
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         bluez \
@@ -265,7 +254,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 17) Containers
+# 16) Containers
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         docker-ce \
@@ -280,7 +269,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 18) Printing & scanning
+# 17) Printing & scanning
 # ---------------------------------------------------------------------------
 # cups-pk-helper = privileged print-config helper, system-config-printer-udev =
 # udev hotplug for USB printers, gutenprint = extra printer driver coverage.
@@ -301,7 +290,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 19) Filesystem & storage tools
+# 18) Filesystem & storage tools
 # ---------------------------------------------------------------------------
 # udisks2-btrfs + libblockdev-btrfs add btrfs support to the udisks/KDE stack,
 # compsize is a btrfs compression analyzer.
@@ -326,11 +315,10 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 20) System services & power/security
+# 19) System services & power/security
 # ---------------------------------------------------------------------------
 # cronie(+anacron)/crontabs = scheduling, audit(+rules) = security logging.
-# Both are enabled in the services step below.
-RUN dnf -y install \
+# Both are enabled in the services step below.RUN dnf -y install \
         firewalld \
         firewall-config \
         earlyoom \
@@ -356,19 +344,19 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 21) Shells & rescue tools — dev tooling comes from /nix
+# 20) Shells & rescue tools — heavy dev tooling lives in distrobox, not the image
 # ---------------------------------------------------------------------------
 # Compilers/build systems/kernel headers intentionally excluded. git is kept:
-# Nix flakes/home-manager fetch sources with it. nano is the TTY rescue editor.
+# it's useful for debugging/troubleshooting on the host. nano is the TTY rescue
+# editor; zsh is the user's default shell choice.
 RUN dnf -y install \
         zsh \
         git \
         nano \
-        kernel-headers \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 22) CLI utilities (rescue kit — everything else comes via /nix)
+# 21) CLI utilities (rescue kit — heavier tooling comes via distrobox)
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         btop \
@@ -389,7 +377,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 23) Vulkan & graphics CLI
+# 22) Vulkan & graphics CLI
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         vulkan-tools \
@@ -398,7 +386,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 24) i18n / locale
+# 23) i18n / locale
 # ---------------------------------------------------------------------------
 RUN dnf -y install \
         glibc-all-langpacks \
@@ -407,7 +395,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # ---------------------------------------------------------------------------
-# 25) Enable Services
+# 24) Enable Services
 # ---------------------------------------------------------------------------
 RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service crond.service auditd.service -f
 
