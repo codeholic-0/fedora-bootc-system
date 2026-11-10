@@ -1,35 +1,34 @@
-# Installer ISO — automated weekly build + SourceForge publication
+# Installer ISO — manual CI build + SourceForge publication
 
-The testing ISO is **built automatically in CI** every week after the Saturday
-image rebuild, and **published to SourceForge** on green. Manual/local builds
-remain available for quick dev loops.
+ISOs are **built on demand in CI** (manual dispatch) and published to
+SourceForge on green. Manual/local builds remain available for dev loops.
 
 ## CI flow (primary)
 
 Job `build-iso` in **`.github/workflows/iso-publish.yaml`** — its own file to
-keep the image workflow scannable, and **manual trigger only**
-(`workflow_dispatch`). Deliberately not chained to the image workflow: a
-`workflow_run` chain would fire on *every* main-branch image run — including
-targeted minimal/final dispatch builds — producing ISOs nobody asked for.
-Run it when you deliberately want a fresh ISO; it cosign-verifies the current
-`:testing` tag first, so a manual build is always against the last published
-image.
+keep the image workflow scannable. `workflow_dispatch` only:
 
-1. Gate (first step — schedule / `disk_config/iso-kde.toml` changes /
-   dispatch `iso:` toggle).
-2. **Cosign-verify `:testing` before building** — refuses to publish an
-   installer for an image our key didn't sign.
-3. Build with the legacy `bootc-image-builder` container
-   (`--type anaconda-iso`), using `disk_config/iso-kde.toml`.
-4. Provenance rename + `sha256sums.txt`, 3-day artifact.
-5. SourceForge rsync with **pinned host-key fingerprints** (from
+```bash
+gh workflow run iso-publish.yaml --ref main                 # role=testing default
+gh workflow run iso-publish.yaml --ref main -f role=stable  # ISO of :stable
+```
+
+1. **Cosign-verify the selected tag before building** — refuses an installer
+   for an image our key didn't sign.
+2. Generate the per-role kickstart (the `bootc switch` target in
+   `disk_config/iso-kde.toml` is `sed`'d to `zen-bootc:<role>`), then build
+   with the pinned, legacy `bootc-image-builder` (`--type anaconda-iso`).
+   The target image must be pulled into runner storage first (newer BIB
+   doesn't auto-pull).
+3. Provenance rename + `sha256sums.txt`, 3-day artifact.
+4. SourceForge rsync with **pinned host-key fingerprints** (from
    `sourceforge.net/p/forge/documentation/SSH%20Key%20Fingerprints/`, verified
    against live keyscan — not TOFU).
-6. Publication self-check: ssh-verify the file exists on `frs`, then post
+5. Publication self-check: ssh-verify the file exists on `frs`, then post
    the public URL to the run summary.
 
 Public URL of the latest ISO follows
-`https://sourceforge.net/projects/fedora-bootc-system/files/<YYYY-MM-DD>/zen-bootc-testing-<YYYYMMDD>-<sha7>.iso/download`
+`https://sourceforge.net/projects/fedora-bootc-system/files/<YYYY-MM-DD>/zen-bootc-<role>-<YYYYMMDD>-<sha7>.iso/download`
 (sourceforge.net/projects/fedora-bootc-system)
 
 Secrets required: `SF_SSH_PRIVATE_KEY` (the key registered on SourceForge)
@@ -45,6 +44,7 @@ and `SF_USERNAME` (SourceForge account name — rsync identifies as
 ## Local build (dev loop)
 
 ```
+sudo podman pull ghcr.io/codeholic-0/zen-bootc:testing
 mkdir -p output
 sudo podman run --rm -it --privileged \
   -v "$(pwd)/output:/output" \
@@ -54,6 +54,11 @@ sudo podman run --rm -it --privileged \
   --rootfs ext4 --type anaconda-iso \
   ghcr.io/codeholic-0/zen-bootc:testing
 ```
+
+The ISO installs the kickstart's bootc-switch target (`:testing`); for a
+`:stable` local ISO, sed the `zen-bootc:testing` line in the toml first
+(CI does this per role; BIB reads plain TOML, and the target must already
+be pulled into storage — BIB doesn't auto-pull).
 
 Output: `output/bootiso/install.iso`. Watch `df -h /tmp` in a second
 terminal while it runs (osbuild stages under /tmp).

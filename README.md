@@ -37,8 +37,9 @@ are immutable per-build anchors — switch to one explicitly to time-travel.
   tracks Fedora 45 package updates without any commits.
 - **Path-filtered CI**: pushing a change to one Containerfile rebuilds only
   that flavor.
-- **Installer ISO** (optional, manual): a CI dispatch builds the testing ISO
-  with [bootc-image-builder](https://github.com/osbuild/image-builder) and
+- **Installer ISO** (optional, manual): a CI dispatch builds the testing or
+  stable ISO (`-f role=…`) with
+  [bootc-image-builder](https://github.com/osbuild/image-builder) and
   publishes it to
   [SourceForge](https://sourceforge.net/projects/fedora-bootc-system) with
   pinned SSH fingerprints and publication self-checks. See
@@ -78,7 +79,8 @@ cosign verify --key cosign.pub \
 ### Installer ISO
 
 Interactive Anaconda installer that installs `:testing` from GHCR at
-install time. Build via CI (Actions → "Publish Testing ISO") or locally —
+install time. Build via CI (Actions → "Publish ISO", role dropdown or
+`gh workflow run iso-publish.yaml -f role=testing`) or locally —
 see [`docs/iso.md`](docs/iso.md).
 
 ## Repo layout
@@ -92,7 +94,7 @@ docs/iso.md                          ISO build + SourceForge publication guide
 plymouth.toml                        boot kernel args
 legacy/nix/                          dormant Nix-era leftovers; the image has NO Nix
 .github/workflows/bootc-publish.yaml CI: build -> chunkah rechunk -> push -> sign
-.github/workflows/iso-publish.yaml   CI: testing ISO -> SourceForge (manual dispatch)
+.github/workflows/iso-publish.yaml   CI: role-choice ISO -> SourceForge (manual dispatch)
 testing/                             work notes + reference clones (gitignored)
 ```
 
