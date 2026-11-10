@@ -1,10 +1,8 @@
 FROM quay.io/fedora/fedora-bootc:45
 ENV FEDORA_VER="45"
 
-# ---------------------------------------------------------------------------
-# 1) System-wide metadata
-# ---------------------------------------------------------------------------
-# OpenContainers OCI labels self-document the image on GHCR/tooling.
+# --- 1) System-wide metadata ---
+# OCI labels self-document the image on GHCR/tooling.
 LABEL org.opencontainers.image.title="zen-bootc" \
       org.opencontainers.image.description="Personal Fedora 45 KDE bootc appliance: codecs, full hardware support, basic utilities; dev userland via distrobox" \
       org.opencontainers.image.vendor="codeholic-0" \
@@ -12,16 +10,13 @@ LABEL org.opencontainers.image.title="zen-bootc" \
       org.opencontainers.image.source="https://github.com/codeholic-0/fedora-bootc-system" \
       org.opencontainers.image.url="https://github.com/codeholic-0/fedora-bootc-system"
 
-# Keep the KDE product identity (swapped in with --allowerasing below).
+# Keep the KDE product identity (--allowerasing swaps the base release set).
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install --allowerasing \
         fedora-release-kde-desktop \
         fedora-release-identity-kde-desktop
-# ---------------------------------------------------------------------------
-# 2) dnf plugins & repos
-# ---------------------------------------------------------------------------
-# dnf-plugins-core FIRST: the bootc base has no dnf plugin packages, but the
-# copr/config-manager/setopt commands below all require them.
+
+# --- 2) dnf plugins & repos ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install dnf-plugins-core dnf5-plugins
 
@@ -36,26 +31,16 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     && dnf install -y --refresh rpmfusion-free-release-tainted rpmfusion-nonfree-release-tainted \
     && dnf makecache
 
-# ---------------------------------------------------------------------------
-# 3) Bridged repos for the ISO depsolver
-# ---------------------------------------------------------------------------
-# The bootc base ships its distro repo definitions in /usr/share/dnf5/repos.d/
-# (dnf5 "system repos"). bootc-image-builder's osbuild depsolver only reads the
-# classic /etc/yum.repos.d/, so copy the definitions over or anaconda-iso
-# builds fail with "No match for argument: <base package>".
+# --- 3) Bridged repos for the ISO depsolver ---
+# BIB's depsolver only reads /etc/yum.repos.d; base puts repo defs in
+# /usr/share/dnf5/repos.d — without this bridge anaconda-iso builds fail.
 RUN cp /usr/share/dnf5/repos.d/*.repo /etc/yum.repos.d/
-# ---------------------------------------------------------------------------
-# 4) Codecs & multimedia framework
-# ---------------------------------------------------------------------------
-# @multimedia pulls the full gstreamer plugin set + codec libs; nothing else
-# needed here. Everything listed below is plugin support, so one group.
+
+# --- 4) Codecs & multimedia framework ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y group install multimedia
-# ---------------------------------------------------------------------------
-# 5) KDE Plasma desktop (core, minimized)
-# ---------------------------------------------------------------------------
-# Irreducible core + the settings/UI modules that matter. Everything else is
-# dropped (userland comes from distrobox/home-manager style tooling).
+
+# --- 5) KDE Plasma desktop (core, minimized) ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         kwin \
@@ -81,11 +66,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         plasma-login-manager \
         kcm-plasmalogin \
         --exclude=plasma-welcome,plasma-discover
-# ---------------------------------------------------------------------------
-# 6) KDE applications (minimized)
-# ---------------------------------------------------------------------------
-# konsole/dolphin/kate per system contract; spectacle, kinfocenter, kscreen are
-# basic daily-driver pieces. kfind/kcalc/kdialog/filelight are tiny utilities.
+
+# --- 6) KDE applications (minimized) ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         konsole \
@@ -107,11 +89,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         kdegraphics-thumbnailers \
         kdenetwork-filesharing \
         kscreen
-# ---------------------------------------------------------------------------
-# 7) Desktop extras (system frameworks pulled in by KDE apps)
-# ---------------------------------------------------------------------------
-# kde-settings-pulseaudio wires KDE audio defaults; libappindicator-gtk3 gives
-# systray icons for Electron apps.
+
+# --- 7) Desktop extras (frameworks pulled in by KDE apps) ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         accountsservice \
@@ -123,11 +102,9 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         kde-settings-pulseaudio \
         libappindicator-gtk3 \
         redhat-menus
-# ---------------------------------------------------------------------------
-# 8) Fonts
-# ---------------------------------------------------------------------------
-# Base image ships the Noto/DejaVu/Adwaita core; all locale default-fonts-*
-# subpackages come with it. CJK pair intentionally dropped (unused, ~200MB).
+
+# --- 8) Fonts ---
+# Base image ships Noto/DejaVu/Adwaita core; CJK deliberately dropped (~200MB).
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         liberation-fonts-all \
@@ -137,12 +114,9 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         rit-meera-new-fonts \
         rit-rachana-fonts \
         source-foundry-hack-fonts
-# ---------------------------------------------------------------------------
-# 9) Input (ibus)
-# ---------------------------------------------------------------------------
-# Kept engine-agnostic: ibus + m17n (covers AS/multi-script schemes) and the
-# typing-booster character predictor. ibus-gtk4 is required for input methods
-# to work inside GTK4 apps. CJK engines intentionally excluded.
+
+# --- 9) Input (ibus) ---
+# Engine-agnostic; CJK engines intentionally excluded.
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         ibus \
@@ -151,11 +125,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         ibus-typing-booster \
         langtable \
         kxkb2locale1
-# ---------------------------------------------------------------------------
-# 10) Audio stack
-# ---------------------------------------------------------------------------
-# instances pulse out of plasma-pa; pulseaudio-utils gives pactl/padsp for CLI.
-# phonon(+vlc backend) is the KDE media framework some widgets/apps use.
+
+# --- 10) Audio stack ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         wireplumber \
@@ -165,11 +136,9 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         alsa-sof-firmware \
         phonon-qt6 \
         phonon-qt6-backend-vlc
-# ---------------------------------------------------------------------------
-# 11) Plymouth boot splash
-# ---------------------------------------------------------------------------
-# Basics + the Breeze theme to match the desktop. plymouth-system-theme pulls
-# the plugin/graphic-libs set; the kargs side lives in plymouth.toml (rhgb quiet).
+
+# --- 11) Plymouth boot splash ---
+# kargs side lives in plymouth.toml (rhgb quiet).
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         plymouth \
@@ -178,17 +147,7 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
 
 RUN plymouth-set-default-theme breeze
 
-# ---------------------------------------------------------------------------
-# 12) Hardware support — kernel modules, firmware, boot tooling
-# ---------------------------------------------------------------------------
-# kernel-modules-extra: additional filesystem/net/misc modules for wider hw.
-# iwlwifi-*: Intel Wi-Fi firmware (mvm = modern, dvm = older, mld = newest gen).
-# libertas + b43: Marvell / old Broadcom Wi-Fi.
-# intel-vsc-firmware: Intel Visual Sensing Controller (MIPI camera).
-# intel-lpmd: Intel Low Power daemon for laptop power tuning.
-# usb_modeswitch: mode-switching for 3G/4G WWAN USB dongles.
-# mcelog: CPU machine-check error reporting. grubby/grub2-tools: kernel arg
-# management; zram-generator-defaults supplies the default zram config.
+# --- 12) Hardware support — kernel modules, firmware, boot tooling ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         kernel-modules-extra \
@@ -207,9 +166,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         grub2-tools-extra \
         grub2-efi-x64-modules \
         zram-generator-defaults
-# ---------------------------------------------------------------------------
-# 13) Media & personal apps (no browser/persepolis/keepassxc — flatpak/distrobox territory)
-# ---------------------------------------------------------------------------
+
+# --- 13) Media & personal apps (no browser — flatpak/distrobox territory) ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         mediawriter \
@@ -218,10 +176,9 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         vlc \
         zenity \
         guvcview
-# ---------------------------------------------------------------------------
-# 14) Network — core, wifi/bluetooth/wwan
-# ---------------------------------------------------------------------------
-# VPN plugins/KCMs intentionally excluded (not used; install per-machine if needed).
+
+# --- 14) Network — core, wifi/bluetooth/wwan ---
+# VPN plugins excluded (install per-machine if needed).
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         NetworkManager \
@@ -234,9 +191,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         bind-utils \
         ethtool \
         iw
-# ---------------------------------------------------------------------------
-# 15) Bluetooth extras (explicit per system requirement)
-# ---------------------------------------------------------------------------
+
+# --- 15) Bluetooth extras ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         bluez \
@@ -249,12 +205,9 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         iwlegacy-firmware \
         realtek-firmware \
         wireless-regdb
-# ---------------------------------------------------------------------------
-# 16) Containers
-# ---------------------------------------------------------------------------
-# podman is also what distrobox uses under the hood. distrobox is an EXPLICIT
-# dev dependency: the appliance image carries no dev toolchain — the dev
-# userland (compilers, language SDKs) lives in distrobox containers.
+
+# --- 16) Containers ---
+# distrobox is the explicit dev userland (image carries no dev toolchain).
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         docker-ce \
@@ -268,11 +221,7 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         fedora-workstation-repositories \
         fedora-third-party
 
-# ---------------------------------------------------------------------------
-# 17) Printing & scanning
-# ---------------------------------------------------------------------------
-# cups-pk-helper = privileged print-config helper, system-config-printer-udev =
-# udev hotplug for USB printers, gutenprint = extra printer driver coverage.
+# --- 17) Printing & scanning ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         cups \
@@ -288,11 +237,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         sane-airscan \
         ipp-usb \
         ghostscript
-# ---------------------------------------------------------------------------
-# 18) Filesystem & storage tools
-# ---------------------------------------------------------------------------
-# udisks2-btrfs + libblockdev-btrfs add btrfs support to the udisks/KDE stack,
-# compsize is a btrfs compression analyzer.
+
+# --- 18) Filesystem & storage tools ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         btrfs-progs \
@@ -312,11 +258,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         cifs-utils \
         samba \
         samba-usershares
-# ---------------------------------------------------------------------------
-# 19) System services & power/security
-# ---------------------------------------------------------------------------
-# cronie(+anacron)/crontabs = scheduling, audit(+rules) = security logging.
-# Both are enabled in the services step below.
+
+# --- 19) System services & power/security ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf install -y firewalld \
         firewall-config \
@@ -340,20 +283,16 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         fprintd \
         pcsc-lite \
         opensc
-# ---------------------------------------------------------------------------
-# 20) Shells & rescue tools — heavy dev tooling lives in distrobox, not the image
-# ---------------------------------------------------------------------------
-# Compilers/build systems/kernel headers intentionally excluded. git is kept:
-# it's useful for debugging/troubleshooting on the host. nano is the TTY rescue
-# editor; zsh is the user's default shell choice.
+
+# --- 20) Shells & rescue tools (heavy dev tooling lives in distrobox) ---
+# zsh = user's default shell.
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         zsh \
         git \
         nano
-# ---------------------------------------------------------------------------
-# 21) CLI utilities (rescue kit — heavier tooling comes via distrobox)
-# ---------------------------------------------------------------------------
+
+# --- 21) CLI utilities (rescue kit) ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         btop \
@@ -371,63 +310,41 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         lsof \
         plocate \
         tar
-# ---------------------------------------------------------------------------
-# 22) Vulkan & graphics CLI
-# ---------------------------------------------------------------------------
+
+# --- 22) Vulkan & graphics CLI ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         vulkan-tools \
         glx-utils \
         libva-utils
-# ---------------------------------------------------------------------------
-# 23) i18n / locale
-# ---------------------------------------------------------------------------
+
+# --- 23) i18n / locale ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         glibc-all-langpacks \
         hunspell \
         hunspell-en
-# ---------------------------------------------------------------------------
-# 24) Enable Services
-# ---------------------------------------------------------------------------
+
+# --- 24) Enable Services ---
 RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service crond.service auditd.service -f
 
-# ---------------------------------------------------------------------------
-# 25) Client-side signature verification (policy.json + cosign.pub)
-# ---------------------------------------------------------------------------
-# NOTE: policy.json + registries.d live in /etc/containers/ (the standard,
-# bootc-supported location — /usr/etc is an unsupported implementation
-# detail, rejected by `bootc container lint`). The pubkey lives in
-# /usr/share/containers/ and is referenced by keyPath. Scoped: only OUR
-# repo requires a valid sigstoreSigned signature (key = committed
-# cosign.pub); everything else stays default-allow so distrobox/dev pulls
-# are unaffected. signedIdentity=matchRepository is REQUIRED for cosign
-# signatures (cosign signs the repository, not the exact tag — per
-# containers-policy.json(5)). registries.d enables .sig attachment
-# download for ghcr.io; without it the sigstoreSigned check silently fails.
+# --- 25) Client-side signature verification ---
+# /etc/containers/ is the bootc-supported location (/usr/etc fails lint).
+# signedIdentity=matchRepository is required for cosign (signs the repo, not
+# the tag). registries.d enables .sig attachment downloads for ghcr.io.
 RUN mkdir -p /etc/containers/registries.d /usr/share/containers
 COPY policy.json /etc/containers/policy.json
 COPY cosign.pub /usr/share/containers/cosign.pub
 COPY registries.d/zen-bootc.yaml /etc/containers/registries.d/zen-bootc.yaml
 
-# ---------------------------------------------------------------------------
-# 26) Build-hygiene cleanup (required for the lint below to be meaningful)
-# ---------------------------------------------------------------------------
-# Without `dnf clean all` (removed for cache mounts), dnf/flatpak leave
-# runtime-only state in the image: logfiles, repo counters, tmp caches.
-# /run gets stray cachefiles too. All runtime-only dirs are ignored by
-# bootc but produce lint warnings; /var content is real bloat. /run must
-# EXCLUDE /run/systemd — buildah bind-mounts DNS files there (stub-resolv
-# .conf), and rm on a mount point fails with "Device or resource busy".
+# --- 26) Build-hygiene cleanup ---
+# No dnf clean all (cache mounts): purge runtime-only state. /run must exclude
+# /run/systemd* — buildah bind-mounts DNS files there ("Device or resource busy").
 RUN rm -rf \
         /var/log/dnf5.log* \
         /var/lib/dnf \
         /var/lib/flatpak/repo/tmp \
     && find /run -mindepth 1 ! -path '/run/systemd*' ! -name '.containerenv' -exec rm -rf {} +
 
-# ---------------------------------------------------------------------------
-# 27) Bootc conformance lint (bluefin/template pattern)
-# ---------------------------------------------------------------------------
-# Fails the build on hard contract violations (etc-usretc etc.). Warnings
-# for missing tmpfiles.d entries are tolerated.
+# --- 27) Bootc conformance lint ---
 RUN bootc container lint

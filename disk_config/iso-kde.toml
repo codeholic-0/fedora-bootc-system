@@ -1,23 +1,10 @@
-# disk_config/iso-kde.toml — PRIMARY ISO config (see docs/iso.md).
-# Used by the legacy bootc-image-builder one-command flow:
-#   sudo podman run ... quay.io/centos-bootc/bootc-image-builder:latest \
-#     --rootfs ext4 --type anaconda-iso \
-#     -v "$(pwd)/disk_config/iso-kde.toml:/config.toml:ro" \
-#     ghcr.io/codeholic-0/zen-bootc:testing
-# (2026-11-10: the newer image-builder CLI path was attempted and PARKED —
-# it failed to boot/launch its installer in a VM; see docs/iso.md appendix.)
-#
-# Kickstart: intentionally minimal. No lang/keyboard/timezone/rootpw lines —
-# anaconda-iso handles locale/keyboard interactively and BIB injects user
-# handling; the only contract line is the %post bootc switch that replaces the
-# installer environment with our published OCI (this is what makes the ISO
-# install OUR image instead of the stock base).
+# disk_config/iso-kde.toml — testing-ISO config (legacy bootc-image-builder
+# anaconda-iso flow). See docs/iso.md.
 
-
-# Flathub lives HERE (ISO-side), not in the image: remote-add baked into the
-# Containerfile didn't take effect reliably at deploy time. The %post runs
-# chrooted into the freshly deployed system AFTER bootc switch, so this is
-# the ISO-scoped, run-once setup point. Image itself stays flathub-free.
+# Kickstart minimal on purpose: everything except the contract lines is set
+# interactively in Anaconda (image stays locale-neutral).
+# Flathub lives here (ISO-side), not in the image — a Containerfile bake
+# proved unreliable; %post lands it into the freshly deployed system.
 
 [customizations.installer.kickstart]
 contents = """
@@ -27,10 +14,8 @@ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/
 %end
 """
 
-# Restore the installer screens Anaconda removes in bootc/image-mode installs.
-# Storage = partitioning, Users = account/password setup, Timezone = clock UI.
-# Subscription is RHEL-only noise. (Reference: iso-kde.toml from the ublue
-# template — same list.)
+# Anaconda hides these screens in image-mode installs.
+# Subscription is RHEL-only noise. (Reference: the ublue template.)
 [customizations.installer.modules]
 enable = [
   "org.fedoraproject.Anaconda.Modules.Storage",

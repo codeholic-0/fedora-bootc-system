@@ -1,13 +1,9 @@
 name: Publish Testing ISO
 
-# ISO build + SourceForge publication, in its own file to keep
-# bootc-publish.yaml (image building) scannable. MANUAL TRIGGER ONLY
-# (workflow_dispatch): deliberately NOT chained to the image workflow — a
-# workflow_run chain would fire on every main-branch image run (including
-# targeted minimal/final dispatch builds), building ISOs nobody asked for.
-# Run this when you deliberately want a fresh ISO; it always cosign-verifies
-# the current :testing tag first, so a manual build is against the last
-# published image.
+name: Publish Testing ISO
+
+# Manual-only ISO build + SourceForge publish. NOT chained to the image
+# workflow (a workflow_run would fire on every image run). See docs/iso.md.
 
 on:
   workflow_dispatch:
@@ -17,14 +13,13 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/zen-bootc
   SF_PROJECT: fedora-bootc-system
 
-# Workflow-level concurrency: superseded ISO presses cancel.
+# Superseded manual runs cancel.
 concurrency:
   group: iso-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Uses the legacy bootc-image-builder (anaconda-iso) flow — see docs/iso.md
-  # for the full history of why (image-builder generic-iso path failed in VM).
+  # Legacy bootc-image-builder (anaconda-iso) flow; docs/iso.md.
   build-iso:
     name: Build & publish testing ISO
     runs-on: ubuntu-latest
@@ -48,9 +43,7 @@ jobs:
           cosign-release: 'v3.1.4'
 
       - name: Verify :testing signature BEFORE building
-        # Refuse to burn ~1h of runner — and refuse to publish an installer —
-        # on a :testing image our own key didn't sign. cosign reads the
-        # registry directly; the image is public, no pull/login needed.
+        # Don't publish an installer for an unsigned :testing.
         run: |
           IMAGE="${IMAGE,,}"
           cosign verify --key cosign.pub --insecure-ignore-tlog "$IMAGE:testing" \
@@ -63,10 +56,7 @@ jobs:
           sudo apt-get install -y podman rsync
 
       - name: Build ISO
-        # Legacy bootc-image-builder one-command flow (docs/iso.md). GH
-        # runners have no /dev/kvm — BIB falls back to qemu-TCG, so this step
-        # is SLOW (~45-90min). Keep the container unpinned for now; pin by
-        # digest once this has survived a weekly cycle.
+        # No /dev/kvm on runners: BIB falls back to qemu-TCG (slow, ~45-90min).
         run: |
           IMAGE="${IMAGE,,}"
           sudo podman run --rm --privileged \
@@ -78,8 +68,7 @@ jobs:
             "$IMAGE:testing"
 
       - name: Provenance rename + checksum
-        # <name>-<UTC date>-<commit sha7> — sha is the commit the image
-        # workflow last ran on (workflow_run carries it; fallback == checkout).
+        # <role>-<UTC date>-<sha7> naming (github = dispatched head commit).
         run: |
           set -euo pipefail
           ISO_NAME="zen-bootc-testing-$(date -u +%Y%m%d)-${SHA:0:7}.iso"
@@ -97,9 +86,7 @@ jobs:
           retention-days: 3
 
       - name: Pin SourceForge host key (verify, don't trust)
-        # Pin frs.sourceforge.net by the fingerprints SourceForge publishes
-        # (sourceforge.net/p/forge/documentation/SSH%20Key%20Fingerprints/),
-        # verified against a live keyscan — NOT accept-new/TOFU.
+        # Fingerprints from sourceforge.net/p/forge/documentation/SSH%20Key%20Fingerprints/
         run: |
           set -euo pipefail
           ssh-keyscan -t ed25519,rsa frs.sourceforge.net > /tmp/sf_known_hosts
@@ -125,7 +112,7 @@ jobs:
           echo "ISO_URL=https://sourceforge.net/projects/$SF_PROJECT/files/$DATE_DIR/$ISO_NAME/download" >> "$GITHUB_ENV"
 
       - name: Verify publication (self-check)
-        # Same discipline as the cosign self-check: prove the file LANDED.
+        # Prove the file landed (as cosign self-check does for the image).
         env:
           SF_KEY: ${{ secrets.SF_SSH_PRIVATE_KEY }}
           SF_USER: ${{ secrets.SF_USERNAME }}

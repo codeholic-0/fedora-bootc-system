@@ -37,6 +37,12 @@ are immutable per-build anchors — switch to one explicitly to time-travel.
   tracks Fedora 45 package updates without any commits.
 - **Path-filtered CI**: pushing a change to one Containerfile rebuilds only
   that flavor.
+- **Installer ISO** (optional, manual): a CI dispatch builds the testing ISO
+  with [bootc-image-builder](https://github.com/osbuild/image-builder) and
+  publishes it to
+  [SourceForge](https://sourceforge.net/projects/fedora-bootc-system) with
+  pinned SSH fingerprints and publication self-checks. See
+  [`docs/iso.md`](docs/iso.md).
 
 ## Usage
 
@@ -69,19 +75,25 @@ cosign verify --key cosign.pub \
   ghcr.io/codeholic-0/zen-bootc:testing
 ```
 
+### Installer ISO
+
+Interactive Anaconda installer that installs `:testing` from GHCR at
+install time. Build via CI (Actions → "Publish Testing ISO") or locally —
+see [`docs/iso.md`](docs/iso.md).
+
 ## Repo layout
 
 ```
-Containerfile{,.testing,.minimal}   image specs (promote: copy testing->Containerfile)
-policy.json                         signed-ref policy shipped into the image
-registries.d/                       registries.d snippet enabling sigstore
-                                    attachments on ghcr.io (ships into the image)
-disk_config/iso-kde.toml            bootc-image-builder config for a local testing ISO
-docs/iso.md                         local ISO build instructions (ISO CI deferred)
-legacy/nix/                         dormant Nix-era leftovers; the image has NO Nix
-plymouth.toml                       boot kernel args
-.github/workflows/bootc-publish.yml CI: build -> chunkah rechunk -> push -> sign
-testing/                            work notes + reference clones (gitignored)
+Containerfile{,.testing,.minimal}    image specs (promote: copy testing->Containerfile)
+policy.json                          signed-ref policy shipped into the image
+registries.d/                        registries.d snippet shipped into the image
+disk_config/iso-kde.toml             bootc-image-builder config for the testing ISO
+docs/iso.md                          ISO build + SourceForge publication guide
+plymouth.toml                        boot kernel args
+legacy/nix/                          dormant Nix-era leftovers; the image has NO Nix
+.github/workflows/bootc-publish.yaml CI: build -> chunkah rechunk -> push -> sign
+.github/workflows/iso-publish.yaml   CI: testing ISO -> SourceForge (manual dispatch)
+testing/                             work notes + reference clones (gitignored)
 ```
 
 ## Development process

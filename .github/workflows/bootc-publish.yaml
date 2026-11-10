@@ -31,21 +31,17 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/${{ github.repository_owner }}/zen-bootc
-  # Distro-agnostic rechunker (coreos/chunkah). Alternative (needs rpm-ostree
-  # inside the image): rpm-ostree compose build-chunked-oci --bootc.
-  # Pinned by digest (template pattern: "pin once mature") so an upstream
-  # repush of :latest can't break the rechunk step. Bump deliberately.
+  # Distro-agnostic rechunker; pinned by digest, bump deliberately.
   RECHUNK_IMAGE: quay.io/coreos/chunkah@sha256:71e593421c5de7dcc7c8c5c50e98d3bac572055a76f399f61a491d123c20a523
 
-# Cancel superseded runs of this workflow on the same branch to avoid
-# burning build+push minutes on outdated commits.
+# Superseded runs die.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   changes:
-    # Scheduled runs always build everything; push/dispatch filter by paths.
+    # Scheduled builds build everything; push/dispatch filter by paths.
     if: github.event_name == 'schedule' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -72,9 +68,7 @@ jobs:
               - 'policy.json'
               - '.github/workflows/bootc-publish.yaml'
 
-  # One job body for all three flavors (matrix), following the ublue/bluefin
-  # "reusable build" pattern scaled to a single image. Flavor-specific logic
-  # is data (matrix fields), not duplicated YAML.
+  # One matrix job for all three flavors; per-flavor logic is matrix data.
   build:
     name: Build ${{ matrix.flavor.role }}
     needs: changes
@@ -104,10 +98,8 @@ jobs:
             extra_tags: "latest"
     steps:
       - name: Decide whether to run
-        # Job-level `if` cannot use the matrix context, so the per-flavor gate
-        # lives in a step instead — and MUST be the first step so skipped
-        # flavors don't pay for pruning/checkout/podman-install. Needs only
-        # needs.changes outputs + event context; no checkout required.
+        # Job-level `if` can't see matrix context: the gate lives in a step
+        # and runs FIRST so skipped flavors pay for nothing.
         id: gate
         env:
           ROLE: ${{ matrix.flavor.role }}
@@ -130,8 +122,7 @@ jobs:
           echo "SHOULD_RUN=${SHOULD_RUN:-false}" >> "$GITHUB_ENV"
 
       - name: Maximize build space
-        # Rechunking makes a full copy of the image; the ~10GB images need the
-        # runner pruned first (same recipe the ublue templates use).
+        # Rechunking copies the full image; prune the runner first.
         if: env.SHOULD_RUN == 'true'
         uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
 
@@ -146,7 +137,7 @@ jobs:
           sudo apt-get install -y podman
 
       - name: Log in to GHCR
-        # Built-in GITHUB_TOKEN (job's packages:write scope) — no PAT needed.
+        # Built-in GITHUB_TOKEN, no PAT.
         if: env.SHOULD_RUN == 'true'
         run: |
           IMAGE="${IMAGE,,}"
@@ -160,8 +151,7 @@ jobs:
           EXTRA_TAGS: ${{ matrix.flavor.extra_tags }}
         run: |
           IMAGE="${IMAGE,,}"
-          # --pull=newer re-checks the base manifest each build (this is what
-          # makes the weekly schedule pick up Fedora package/base updates).
+          # --pull=newer is what makes the weekly schedule track base updates.
           TAG_ARGS=()
           for extra in ${EXTRA_TAGS}; do
             TAG_ARGS+=(-t "$IMAGE:$extra")
@@ -226,8 +216,7 @@ jobs:
           cosign-release: 'v3.1.4'
 
       - name: Log in to GHCR (docker client, for cosign)
-        # cosign uses its own credential chain (~/.docker/config.json), NOT
-        # podman's authfile — without this the signature upload gets UNAUTHORIZED.
+        # cosign uses its own credential chain, not podman's authfile.
         if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -238,17 +227,13 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           IMAGE="${IMAGE,,}"
-          # Key-based signing is done against the pushed digest, not the tag.
-          # One signature on the digest covers every tag sharing it.
+          # Sign the pushed digest; every tag sharing it is covered.
           cosign sign -y --new-bundle-format=false --use-signing-config=false \
             --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
 
       - name: Verify signature (self-check)
-        # Close the loop: prove the digest we just pushed is verifiable with
-        # the committed public key, instead of trusting sign exit code.
-        # NOTE: verify has no bundle-format/signing-config flags (those exist
-        # only on `cosign sign`). Our key-based signatures carry no Rekor
-        # entry, so verification must ignore the transparency log.
+        # Prove the pushed digest verifies with cosign.pub. Key-based signs
+        # have no Rekor entry, hence --insecure-ignore-tlog.
         if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
         run: |
           IMAGE="${IMAGE,,}"
