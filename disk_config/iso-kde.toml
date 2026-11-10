@@ -13,10 +13,17 @@
 # installer environment with our published OCI (this is what makes the ISO
 # install OUR image instead of the stock base).
 
+
+# Flathub lives HERE (ISO-side), not in the image: remote-add baked into the
+# Containerfile didn't take effect reliably at deploy time. The %post runs
+# chrooted into the freshly deployed system AFTER bootc switch, so this is
+# the ISO-scoped, run-once setup point. Image itself stays flathub-free.
+
 [customizations.installer.kickstart]
 contents = """
 %post
 bootc switch --mutate-in-place --transport registry ghcr.io/codeholic-0/zen-bootc:testing
+flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 %end
 """
 
