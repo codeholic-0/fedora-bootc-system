@@ -1,8 +1,11 @@
-# Local ISO build config (legacy bootc-image-builder `iso` / anaconda-iso path)
-# Build: sudo podman run ... quay.io/centos-bootc/bootc-image-builder --type iso
-#        --config config.toml --local /path/to/<built-testing-image-ref>
-# Purpose: VM testing of the testing-tag image; production ISO design waits
-# for the image-builder (bootc-generic-iso) migration — see testing/compaction.md.
+# disk_config/iso-kde.toml — PRIMARY ISO config (see docs/iso.md).
+# Used by the legacy bootc-image-builder one-command flow:
+#   sudo podman run ... quay.io/centos-bootc/bootc-image-builder:latest \
+#     --rootfs ext4 --type anaconda-iso \
+#     -v "$(pwd)/disk_config/iso-kde.toml:/config.toml:ro" \
+#     ghcr.io/codeholic-0/zen-bootc:testing
+# (2026-11-10: the newer image-builder CLI path was attempted and PARKED —
+# it failed to boot/launch its installer in a VM; see docs/iso.md appendix.)
 #
 # Kickstart: intentionally minimal. No lang/keyboard/timezone/rootpw lines —
 # anaconda-iso handles locale/keyboard interactively and BIB injects user
@@ -30,6 +33,7 @@ enable = [
   "org.fedoraproject.Anaconda.Modules.Services",
   "org.fedoraproject.Anaconda.Modules.Users",
   "org.fedoraproject.Anaconda.Modules.Timezone",
+  "org.fedoraproject.Anaconda.Modules.Localization",
 ]
 
 disable = [

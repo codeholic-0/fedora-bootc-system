@@ -255,8 +255,6 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
 # podman is also what distrobox uses under the hood. distrobox is an EXPLICIT
 # dev dependency: the appliance image carries no dev toolchain — the dev
 # userland (compilers, language SDKs) lives in distrobox containers.
-# The proper unfiltered flathub remote is added explicitly:
-# fedora-flathub-remote only refs Fedora's filtered view.
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         docker-ce \
@@ -268,8 +266,7 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         flatpak \
         fedora-flathub-remote \
         fedora-workstation-repositories \
-        fedora-third-party \
-    && flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+        fedora-third-party
 
 # ---------------------------------------------------------------------------
 # 17) Printing & scanning
