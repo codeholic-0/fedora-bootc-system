@@ -1,7 +1,5 @@
 name: Publish Testing ISO
 
-name: Publish Testing ISO
-
 # Manual-only ISO build + SourceForge publish. NOT chained to the image
 # workflow (a workflow_run would fire on every image run). See docs/iso.md.
 
