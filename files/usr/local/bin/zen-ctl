@@ -1,0 +1,94 @@
+#!/bin/bash
+# zen-ctl — upgrade check/status/apply for zen-bootc.
+# Contract (verified 2026-11-10 on bootc-vm): no-update=empty+rc0;
+# available=prose+rc0; unsigned ref=error+rc1. State: /var/lib/zen-ctl/last-check.
+set -u
+
+STATE_DIR=/var/lib/zen-ctl
+dig() { jq -r "$1" 2>/dev/null; }
+
+req_root() {
+    [ "$(id -u)" -eq 0 ] || { echo "zen-ctl: run as root (sudo zen-ctl $1)" >&2; exit 2; }
+}
+save_state() { mkdir -p "$STATE_DIR" && printf '%s\n' "$1" > "$STATE_DIR/last-check"; }
+
+cmd_check() {
+    req_root check
+    local out rc digest ver
+    out=$(bootc upgrade --check 2>&1) && rc=0 || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        save_state "$(date -Is) error $(printf '%s' "$out" | head -1)"
+        logger -t zen-ctl "check failed (rc=$rc): $out"
+        echo "zen-ctl: check failed (rc=$rc):" >&2
+        printf '%s\n' "$out" >&2
+        exit 2
+    fi
+    if [ -z "$out" ]; then
+        save_state "$(date -Is) up-to-date"
+        logger -t zen-ctl "check: up to date"
+        echo "zen-ctl: up to date"
+        return 0
+    fi
+    if printf '%s' "$out" | grep -q '^Update available for:'; then
+        digest=$(printf '%s' "$out" | sed -n 's/^[[:space:]]*Digest: //p' | head -1)
+        ver=$(printf '%s' "$out" | sed -n 's/^[[:space:]]*Version: //p' | head -1)
+        save_state "$(date -Is) available ${digest:-?} ${ver:-?}"
+        logger -t zen-ctl "check: update available ${ver:-} ${digest:-}"
+        echo "zen-ctl: update available ${ver:-(version unknown)} ${digest:-}"
+        echo "zen-ctl: update available — run 'sudo zen-ctl upgrade'" | wall 2>/dev/null || true
+        return 1
+    fi
+    save_state "$(date -Is) unknown $(printf '%s' "$out" | head -1)"
+    logger -t zen-ctl "check: unexpected output: $out"
+    echo "zen-ctl: unexpected check output (see journal)" >&2
+    printf '%s\n' "$out" >&2
+    exit 2
+}
+
+cmd_status() {
+    req_root status
+    local sj d1 v1 tag d2 out
+    sj=$(bootc status --json 2>/dev/null)
+    d1=$(printf '%s' "$sj" | dig '.status.booted.image.imageDigest')
+    v1=$(printf '%s' "$sj" | dig '.status.booted.image.version')
+    tag=$(printf '%s' "$sj" | dig '.status.booted.image.image.image')
+    d2=$(printf '%s' "$sj" | dig '.status.staged.image.imageDigest')
+    echo "tracked: ${tag:-unknown}"
+    echo "running: ${v1:-?} ${d1:-unknown}"
+    if [ -n "$d2" ] && [ "$d2" != "null" ]; then echo "staged:  $d2"; else echo "staged:  none"; fi
+    out=$(bootc upgrade --check 2>/dev/null) || { echo "remote:  check failed"; return 2; }
+    if [ -z "$out" ]; then
+        echo "remote:  up to date"
+        save_state "$(date -Is) up-to-date"
+        return 0
+    fi
+    d3=$(printf '%s' "$out" | sed -n 's/^[[:space:]]*Digest: //p' | head -1)
+    v2=$(printf '%s' "$out" | sed -n 's/^[[:space:]]*Version: //p' | head -1)
+    echo "remote:  update available ${v2:-} ${d3:-}"
+    save_state "$(date -Is) available ${d3:-?} ${v2:-?}"
+    return 1
+}
+
+cmd_upgrade() {
+    req_root upgrade
+    if [ "${1:-}" = "--apply" ]; then
+        exec bootc upgrade --apply
+    elif [ "$#" -gt 0 ]; then
+        echo "usage: zen-ctl upgrade [--apply]" >&2
+        exit 2
+    fi
+    exec bootc upgrade
+}
+
+case "${1:-}" in
+    check)   shift; cmd_check "$@" ;;
+    status)  shift; cmd_status "$@" ;;
+    upgrade) shift; cmd_upgrade "$@" ;;
+    help|-h|--help|"")
+        echo "usage: zen-ctl check | status | upgrade [--apply]"
+        echo "  check    probe upstream digest; rc1 = update available"
+        echo "  status   running/staged digest + live remote check"
+        echo "  upgrade  stage an update (never automatic); --apply reboots into it"
+        echo "cron: /etc/cron.d/zen-ctl runs 'check' weekly (Sat 22:00)." ;;
+    *) echo "zen-ctl: unknown subcommand '$1'" >&2; exit 2 ;;
+esac

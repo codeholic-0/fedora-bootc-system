@@ -46,6 +46,18 @@ Installer ISO: Actions → "Publish ISO" (role dropdown), or
 `gh workflow run iso-publish.yaml -f role=testing` — see
 [`docs/iso.md`](docs/iso.md).
 
+## Updates
+
+```bash
+zen-ctl check            # probe digest; also via /etc/cron.d/zen-ctl (Sat 22:00)
+zen-ctl status           # tracking tag + running/staged digest + remote check
+sudo zen-ctl upgrade     # stage an update (manual only)
+sudo zen-ctl upgrade --apply
+```
+
+Applying is never automatic: cron runs `check` only; journal+wall announce
+results.
+
 ## Repo layout
 
 ```
@@ -53,6 +65,7 @@ Containerfile{,.testing,.minimal}    image specs (promote: copy testing->Contain
 policy.json                          signed-ref policy shipped into the image
 registries.d/                        registries.d snippet shipped into the image
 disk_config/iso-kde.toml             bootc-image-builder config for the ISO
+files/                               image-shipped files (zen-ctl, cron, drop-ins)
 docs/iso.md                          ISO build + SourceForge guide
 plymouth.toml                        boot kernel args
 legacy/nix/                          dormant Nix-era leftovers; image has NO Nix
