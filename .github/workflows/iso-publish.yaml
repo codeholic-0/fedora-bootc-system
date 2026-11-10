@@ -85,12 +85,16 @@ jobs:
 
       - name: Provenance rename + checksum
         # zen-bootc-<role>-<UTC date>-<sha7> (sha = dispatched head commit).
+        # Sums file named per-ISO: same-day/same-role represses can't clobber
+        # each other's checksums on SourceForge (frs rsync overwrites).
         run: |
           set -euo pipefail
           ISO_NAME="zen-bootc-${ROLE}-$(date -u +%Y%m%d)-${SHA:0:7}.iso"
           mv output/bootiso/install.iso "output/$ISO_NAME"
-          ( cd output && sha256sum "$ISO_NAME" | tee sha256sums.txt )
+          ISO_HASH="$ISO_NAME.sha256"
+          ( cd output && sha256sum "$ISO_NAME" | tee "$ISO_HASH" )
           echo "ISO_NAME=$ISO_NAME" >> "$GITHUB_ENV"
+          echo "ISO_HASH=$ISO_HASH" >> "$GITHUB_ENV"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -98,7 +102,7 @@ jobs:
           name: ${{ env.ISO_NAME }}
           path: |
             output/${{ env.ISO_NAME }}
-            output/sha256sums.txt
+            output/${{ env.ISO_HASH }}
           retention-days: 3
 
       - name: Pin SourceForge host key (verify, don't trust)
@@ -124,7 +128,7 @@ jobs:
           # rsync creates remote subdirs when they're part of the transfer.
           STAGE="$(mktemp -d)"
           mkdir -p "$STAGE/$DATE_DIR"
-          cp output/"$ISO_NAME" output/sha256sums.txt "$STAGE/$DATE_DIR/"
+          cp output/"$ISO_NAME" output/"$ISO_HASH" "$STAGE/$DATE_DIR/"
           rsync -av -e "$SSHOPTS" "$STAGE/$DATE_DIR" \
             "$SF_USER@frs.sourceforge.net:/home/frs/project/$SF_PROJECT/"
           rm -rf "$STAGE"
@@ -145,6 +149,7 @@ jobs:
             "$SF_USER@frs.sourceforge.net:/home/frs/project/$SF_PROJECT/$SF_DATE_DIR/" \
             | tee listing.txt
           grep -q "$ISO_NAME" listing.txt || { echo "ISO not visible on frs"; exit 1; }
+          grep -q "$ISO_HASH" listing.txt || { echo "Checksum not visible on frs"; exit 1; }
           rm -f "$PKT"
           {
             echo "## ISO published"
@@ -152,4 +157,5 @@ jobs:
             echo "- File: \`$ISO_NAME\`"
             echo "- Size: $(du -h "output/$ISO_NAME" | cut -f1)"
             echo "- URL: $ISO_URL"
+            echo "- Checksum: \`$ISO_HASH\` (sha256sum -c, same dir)"
           } >> "$GITHUB_STEP_SUMMARY"

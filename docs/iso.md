@@ -14,6 +14,8 @@ gh workflow run iso-publish.yaml --ref main -f role=stable  # role=stable
   cosign-verifies the tag first and the ISO installs that tag at boot.
 - Output (run summary has the URL):
   `https://sourceforge.net/projects/zen-bootc/files/<YYYY-MM-DD>/zen-bootc-<role>-<YYYYMMDD>-<sha7>.iso/download`
+- Each ISO ships its own `<name>.iso.sha256` beside it (verify with
+  `sha256sum -c <name>.iso.sha256`).
 - Secrets: `SF_SSH_PRIVATE_KEY`, `SF_USERNAME`.
 - Known constraints: runner pinned to `ubuntu-24.04` (26.04 AppArmor breaks
   osbuild mounts); BIB pinned by digest; frs accepts rsync/sftp only.
