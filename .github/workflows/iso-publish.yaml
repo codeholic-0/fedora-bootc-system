@@ -120,18 +120,20 @@ jobs:
           PKT=$(mktemp); install -m 600 /dev/null "$PKT"; printf '%s\n' "$SF_KEY" > "$PKT"
           SSHOPTS="ssh -i $PKT -o IdentitiesOnly=yes -o UserKnownHostsFile=/tmp/sf_known_hosts -o StrictHostKeyChecking=yes"
           DATE_DIR="$(date -u +%Y-%m-%d)"
-          # SourceForge runs rsync 3.1.4 — no --mkpath (3.2+). Pre-create dir.
-          $SSHOPTS "$SF_USER@frs.sourceforge.net" \
-            "mkdir -p /home/frs/project/$SF_PROJECT/$DATE_DIR/"
-          rsync -av -e "$SSHOPTS" \
-            output/"$ISO_NAME" output/sha256sums.txt \
-            "$SF_USER@frs.sourceforge.net:/home/frs/project/$SF_PROJECT/$DATE_DIR/"
-          rm -f "$PKT"
+          # frs is a restricted shell (rsync/sftp only): no ssh mkdir/ls.
+          # rsync creates remote subdirs when they're part of the transfer.
+          STAGE="$(mktemp -d)"
+          mkdir -p "$STAGE/$DATE_DIR"
+          cp output/"$ISO_NAME" output/sha256sums.txt "$STAGE/$DATE_DIR/"
+          rsync -av -e "$SSHOPTS" "$STAGE/$DATE_DIR" \
+            "$SF_USER@frs.sourceforge.net:/home/frs/project/$SF_PROJECT/"
+          rm -rf "$STAGE"
           echo "SF_DATE_DIR=$DATE_DIR" >> "$GITHUB_ENV"
           echo "ISO_URL=https://sourceforge.net/projects/$SF_PROJECT/files/$DATE_DIR/$ISO_NAME/download" >> "$GITHUB_ENV"
 
       - name: Verify publication (self-check)
         # Prove the file landed (as cosign self-check does for the image).
+        # rsync --list-only stays inside the restricted-shell protocol.
         env:
           SF_KEY: ${{ secrets.SF_SSH_PRIVATE_KEY }}
           SF_USER: ${{ secrets.SF_USERNAME }}
@@ -139,8 +141,9 @@ jobs:
           set -euo pipefail
           PKT=$(mktemp); install -m 600 /dev/null "$PKT"; printf '%s\n' "$SF_KEY" > "$PKT"
           SSHOPTS="ssh -i $PKT -o IdentitiesOnly=yes -o UserKnownHostsFile=/tmp/sf_known_hosts -o StrictHostKeyChecking=yes"
-          $SSHOPTS "$SF_USER@frs.sourceforge.net" \
-            "ls -la /home/frs/project/$SF_PROJECT/$SF_DATE_DIR/" | tee listing.txt
+          rsync -a --list-only -e "$SSHOPTS" \
+            "$SF_USER@frs.sourceforge.net:/home/frs/project/$SF_PROJECT/$SF_DATE_DIR/" \
+            | tee listing.txt
           grep -q "$ISO_NAME" listing.txt || { echo "ISO not visible on frs"; exit 1; }
           rm -f "$PKT"
           {
