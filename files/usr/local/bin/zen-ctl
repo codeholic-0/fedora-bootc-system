@@ -38,7 +38,9 @@ cmd_check() {
         save_state "$(date -Is) available ${digest:-?} ${ver:-?}"
         logger -t zen-ctl "check: update available ${ver:-} ${digest:-}"
         echo "zen-ctl: update available ${ver:-(version unknown)} ${digest:-}"
-        echo "zen-ctl: update available — run 'zen-ctl upgrade'" | wall 2>/dev/null || true
+        # wall = cron channel only; interactive runs already show the line
+        # above (wall would re-broadcast into the same pts = duplicate).
+        [ -t 0 ] || { echo "zen-ctl: update available — run 'zen-ctl upgrade'" | wall 2>/dev/null || true; }
         return 1
     fi
     save_state "$(date -Is) unknown $(printf '%s' "$out" | head -1)"
