@@ -58,6 +58,7 @@ jobs:
         run: |
           mkdir -p output
           IMAGE="${IMAGE,,}"
+          sudo podman pull "$IMAGE:testing" \
           sudo podman run --rm --privileged \
             -v "$PWD/output:/output" \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
