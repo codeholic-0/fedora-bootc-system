@@ -64,9 +64,9 @@ jobs:
           sudo apt-get install -y podman rsync
 
       - name: Build ISO
-        # No /dev/kvm on runners: BIB falls back to qemu-TCG (slow, ~45-90min).
-        # Kickstart target is generated per-role (BIB takes static TOML only).
-        # Newer BIB doesn't auto-pull — target must be in host storage first.
+        # Kickstart target is generated per-role (BIB takes plain TOML only);
+        # newer BIB doesn't auto-pull. 24.04 runners expose /dev/kvm — the
+        # test ISO built in ~6 min, not the TCG slowness feared pre-kvm.
         run: |
           mkdir -p output
           IMAGE="${IMAGE,,}"
@@ -80,6 +80,8 @@ jobs:
             quay.io/centos-bootc/bootc-image-builder@sha256:dab86ee6b46dcade411b37f4e70b07d93b6a06da0dbfec6fe89247a220e0d9f8 \
             --rootfs ext4 --type anaconda-iso \
             "$IMAGE:$ROLE"
+          # BIB runs rootful; hand the artifacts back to the runner user.
+          sudo chown -R "$(id -u):$(id -g)" output
 
       - name: Provenance rename + checksum
         # zen-bootc-<role>-<UTC date>-<sha7> (sha = dispatched head commit).
