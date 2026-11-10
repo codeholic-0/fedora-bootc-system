@@ -1,36 +1,369 @@
 FROM quay.io/fedora/fedora-bootc:45
+ENV FEDORA_VER="45"
 
-# Utilities
-RUN dnf -y install \
-        pciutils \
-        smartmontools \
-        gvfs \
-        thermald \
+# --- 1) System-wide metadata ---
+# OCI labels self-document the image on GHCR/tooling.
+LABEL org.opencontainers.image.title="zen-bootc" \
+      org.opencontainers.image.description="Personal Fedora 45 KDE bootc appliance: codecs, full hardware support, basic utilities; dev userland via distrobox" \
+      org.opencontainers.image.vendor="codeholic-0" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/codeholic-0/zen-bootc" \
+      org.opencontainers.image.url="https://github.com/codeholic-0/zen-bootc"
+
+# Keep the KDE product identity (--allowerasing swaps the base release set).
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install --allowerasing \
+        fedora-release-kde-desktop \
+        fedora-release-identity-kde-desktop
+
+# --- 2) dnf plugins & repos ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install dnf-plugins-core dnf5-plugins
+
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$FEDORA_VER.noarch.rpm" \
+        "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$FEDORA_VER.noarch.rpm" \
+    && dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo \
+    && dnf copr enable imput/helium -y \
+    && dnf config-manager setopt 'rpmfusion-free.enabled=1' 'rpmfusion-free-updates.enabled=1' \
+        'rpmfusion-nonfree.enabled=1' 'rpmfusion-nonfree-updates.enabled=1' \
+    && dnf config-manager setopt fedora-cisco-openh264.enabled=1 \
+    && dnf install -y --refresh rpmfusion-free-release-tainted rpmfusion-nonfree-release-tainted \
+    && dnf makecache
+
+# --- 3) Bridged repos for the ISO depsolver ---
+# BIB's depsolver only reads /etc/yum.repos.d; base puts repo defs in
+# /usr/share/dnf5/repos.d — without this bridge anaconda-iso builds fail.
+RUN cp /usr/share/dnf5/repos.d/*.repo /etc/yum.repos.d/
+
+# --- 4) Codecs & multimedia framework ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y group install multimedia
+
+# --- 5) KDE Plasma desktop (core, minimized) ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        kwin \
+        plasma-desktop \
+        plasma-workspace \
+        plasma-thunderbolt \
+        plasma-systemsettings \
+        plasma-nm \
+        plasma-pa \
+        plasma-print-manager \
+        kdeplasma-addons \
+        plasma-drkonqi \
+        bluedevil \
+        polkit-kde \
+        kde-gtk-config \
+        ocean-sound-theme \
+        xdg-desktop-portal-kde \
+        kcm-plasma-keyboard \
+        flatpak-kcm \
+        ksshaskpass \
+        pinentry-qt \
+        pam-kwallet \
+        plasma-login-manager \
+        kcm-plasmalogin \
+        --exclude=plasma-welcome,plasma-discover
+
+# --- 6) KDE applications (minimized) ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        konsole \
+        dolphin \
+        dolphin-plugins \
+        kate \
+        ark \
+        kfind \
+        kdialog \
+        kcalc \
+        filelight \
+        spectacle \
+        kinfocenter \
+        kwalletmanager5 \
+        kio-extras \
+        kio-admin \
+        kio-fuse \
+        kdnssd \
+        kdegraphics-thumbnailers \
+        kdenetwork-filesharing \
+        kscreen
+
+# --- 7) Desktop extras (frameworks pulled in by KDE apps) ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        accountsservice \
+        colord \
+        colord-kde \
+        desktop-backgrounds-kde \
+        desktop-file-utils \
+        kde-settings \
+        kde-settings-pulseaudio \
+        libappindicator-gtk3 \
+        redhat-menus
+
+# --- 8) Fonts ---
+# Base image ships Noto/DejaVu/Adwaita core; CJK deliberately dropped (~200MB).
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        liberation-fonts-all \
+        google-noto-sans-fonts \
+        google-noto-serif-fonts \
+        google-noto-color-emoji-fonts \
+        rit-meera-new-fonts \
+        rit-rachana-fonts \
+        source-foundry-hack-fonts
+
+# --- 9) Input (ibus) ---
+# Engine-agnostic; CJK engines intentionally excluded.
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        ibus \
+        ibus-gtk4 \
+        ibus-m17n \
+        ibus-typing-booster \
+        langtable \
+        kxkb2locale1
+
+# --- 10) Audio stack ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        wireplumber \
+        pulseaudio-utils \
+        alsa-utils \
+        alsa-ucm \
+        alsa-sof-firmware \
+        phonon-qt6 \
+        phonon-qt6-backend-vlc
+
+# --- 11) Plymouth boot splash ---
+# kargs side lives in plymouth.toml (rhgb quiet).
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        plymouth \
+        plymouth-system-theme \
+        plymouth-theme-breeze
+
+RUN plymouth-set-default-theme breeze
+
+# --- 12) Hardware support — kernel modules, firmware, boot tooling ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         kernel-modules-extra \
+        iwlwifi-mvm-firmware \
+        iwlwifi-dvm-firmware \
+        iwlwifi-mld-firmware \
+        libertas-firmware \
+        b43-fwcutter \
+        b43-openfwwf \
+        intel-vsc-firmware \
+        intel-lpmd \
+        usb_modeswitch \
+        usb_modeswitch-data \
+        mcelog \
+        grubby \
+        grub2-tools-extra \
+        grub2-efi-x64-modules \
+        zram-generator-defaults
+
+# --- 13) Media & personal apps (no browser — flatpak/distrobox territory) ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        mediawriter \
+        gthumb \
+        yt-dlp \
+        vlc \
+        zenity \
+        guvcview
+
+# --- 14) Network — core, wifi/bluetooth/wwan ---
+# VPN plugins excluded (install per-machine if needed).
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        NetworkManager \
+        NetworkManager-wifi \
+        NetworkManager-bluetooth \
+        NetworkManager-wwan \
+        NetworkManager-config-connectivity-fedora \
+        openssh-server \
+        openssh-clients \
+        bind-utils \
+        ethtool \
+        iw
+
+# --- 15) Bluetooth extras ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        bluez \
+        bluez-obexd \
+        iwlbluetooth-firmware \
+        brcmfmac-firmware \
+        atheros-firmware \
+        nxpwireless-firmware \
+        mt7xxx-firmware \
+        iwlegacy-firmware \
+        realtek-firmware \
+        wireless-regdb
+
+# --- 16) Containers ---
+# distrobox is the explicit dev userland (image carries no dev toolchain).
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        docker-ce \
+        docker-compose-plugin \
+        docker-buildx-plugin \
+        podman \
+        podman-compose \
+        distrobox \
+        flatpak \
+        fedora-flathub-remote \
+        fedora-workstation-repositories \
+        fedora-third-party
+
+# --- 17) Printing & scanning ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        cups \
+        cups-filters \
+        cups-filters-driverless \
+        cups-pk-helper \
+        system-config-printer-udev \
+        gutenprint \
+        gutenprint-cups \
+        gutenprint-libs \
+        hplip \
+        sane-backends \
+        sane-airscan \
+        ipp-usb \
+        ghostscript
+
+# --- 18) Filesystem & storage tools ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        btrfs-progs \
+        udisks2-btrfs \
+        libblockdev-btrfs \
+        compsize \
+        ntfs-3g \
+        exfatprogs \
+        e2fsprogs \
+        dosfstools \
+        xfsprogs \
+        f2fs-tools \
+        parted \
+        gocryptfs \
+        cryfs \
+        fuse-sshfs \
+        cifs-utils \
+        samba \
+        samba-usershares
+
+# --- 19) System services & power/security ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf install -y firewalld \
+        firewall-config \
+        earlyoom \
+        cronie \
+        cronie-anacron \
+        crontabs \
+        audit \
+        audit-rules \
+        thermald \
+        fwupd \
+        smartmontools \
+        pciutils \
+        usbutils \
+        i2c-tools \
+        lm_sensors \
+        chrony \
+        tuned \
+        switcheroo-control \
+        bluez-cups \
+        fprintd \
+        pcsc-lite \
+        opensc
+
+# --- 20) Shells & rescue tools (heavy dev tooling lives in distrobox) ---
+# zsh = user's default shell.
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        zsh \
+        git \
+        nano
+
+# --- 21) CLI utilities (rescue kit) ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
         btop \
         fastfetch \
-        vim-enhanced \
-        git \
-        curl \
-        wget \
-        util-linux-core \
-        util-linux \
-        glibc-locale-source \
-        glibc-langpack-en \
+        jq \
+        tree \
+        bc \
+        rsync \
         7zip \
         zip \
-        sudo
+        wget2 \
+        curl \
+        which \
+        sudo \
+        lsof \
+        plocate \
+        tar
 
-# Network, Bluetooth, Wifi
-RUN dnf -y install \
-        NetworkManager \
-        NetworkManager-wifi
+# --- 22) Vulkan & graphics CLI ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        vulkan-tools \
+        glx-utils \
+        libva-utils
 
-# Nix Dir, will be bind mounted to /var/nix
-RUN mkdir -p /nix
+# --- 23) i18n / locale ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf -y install \
+        glibc-all-langpacks \
+        hunspell \
+        hunspell-en
 
-# Clean UP
-RUN dnf clean all -y
+# --- 24) Enable Services ---
+RUN systemctl enable NetworkManager.service plasmalogin.service docker.service earlyoom.service crond.service auditd.service -f
 
-# Enable desktop, NW
-RUN systemctl enable NetworkManager.service -f
+# --- 24b) Branding: ZenC OS (dnf-compatible: ID/VERSION_ID left untouched) ---
+# identity-kde owns /usr/lib/os-release; last-writer-wins at image build.
+# /etc/os-release ships as ../usr/lib/os-release symlink (asserted below).
+RUN sed -i \
+      -e 's/^NAME=.*/NAME="ZenC OS"/' \
+      -e 's/^PRETTY_NAME=.*/PRETTY_NAME="ZenC OS 45"/' \
+      -e 's/^VERSION=.*/VERSION="45 (ZenC OS)"/' \
+      /usr/lib/os-release \
+ && [ "$(readlink /etc/os-release)" = "../usr/lib/os-release" ]
+
+# --- 25) Client-side signature verification ---
+# /etc/containers/ is the bootc-supported location (/usr/etc fails lint).
+# signedIdentity=matchRepository is required for cosign (signs the repo, not
+# the tag). registries.d enables .sig attachment downloads for ghcr.io.
+RUN mkdir -p /etc/containers/registries.d /usr/share/containers
+COPY policy.json /etc/containers/policy.json
+COPY cosign.pub /usr/share/containers/cosign.pub
+COPY registries.d/zen-bootc.yaml /etc/containers/registries.d/zen-bootc.yaml
+
+# --- 26) Composefs: systemd-remount-fs skip drop-in ---
+COPY files/usr/lib/systemd/system/systemd-remount-fs.service.d/10-composefs-skip.conf \
+     /usr/lib/systemd/system/systemd-remount-fs.service.d/10-composefs-skip.conf
+
+# --- 27) zen-ctl: upgrade check/status/apply CLI + weekly cron ---
+COPY files/usr/local/bin/zen-ctl /usr/local/bin/zen-ctl
+COPY files/etc/cron.d/zen-ctl /etc/cron.d/zen-ctl
+RUN chmod 0755 /usr/local/bin/zen-ctl && chmod 0644 /etc/cron.d/zen-ctl
+
+# --- 28) Build-hygiene cleanup ---
+# No dnf clean all (cache mounts): purge runtime-only state. /run must exclude
+# /run/systemd* — buildah bind-mounts DNS files there ("Device or resource busy").
+RUN rm -rf \
+        /var/log/dnf5.log* \
+        /var/lib/dnf \
+        /var/lib/flatpak/repo/tmp \
+    && find /run -mindepth 1 ! -path '/run/systemd*' ! -name '.containerenv' -exec rm -rf {} +
+
+# --- 29) Bootc conformance lint ---
+RUN bootc container lint
