@@ -15,7 +15,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/${{ github.repository_owner }}/zen-bootc
-  SF_PROJECT: fedora-bootc-system
+  SF_PROJECT: zen-bootc
 
 # Superseded manual runs cancel.
 concurrency:

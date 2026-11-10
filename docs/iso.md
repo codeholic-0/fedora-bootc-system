@@ -1,49 +1,26 @@
-# Installer ISO — manual CI build + SourceForge publication
+# Installer ISO
 
-ISOs are **built on demand in CI** (manual dispatch) and published to
-SourceForge on green. Manual/local builds remain available for dev loops.
+Manual-dispatch CI builds a bootable network-installer ISO and publishes it to
+SourceForge. Config: `disk_config/iso-kde.toml`.
 
-## CI flow (primary)
-
-Job `build-iso` in **`.github/workflows/iso-publish.yaml`** — its own file to
-keep the image workflow scannable. `workflow_dispatch` only:
+## CI
 
 ```bash
-gh workflow run iso-publish.yaml --ref main                 # role=testing default
-gh workflow run iso-publish.yaml --ref main -f role=stable  # ISO of :stable
+gh workflow run iso-publish.yaml --ref main                 # role=testing
+gh workflow run iso-publish.yaml --ref main -f role=stable  # role=stable
 ```
 
-1. **Cosign-verify the selected tag before building** — refuses an installer
-   for an image our key didn't sign.
-2. Generate the per-role kickstart (the `bootc switch` target in
-   `disk_config/iso-kde.toml` is `sed`'d to `zen-bootc:<role>`), then build
-   with the pinned, legacy `bootc-image-builder` (`--type anaconda-iso`).
-   The target image must be pulled into runner storage first (newer BIB
-   doesn't auto-pull).
-3. Provenance rename + `sha256sums.txt`, 3-day artifact.
-4. SourceForge rsync with **pinned host-key fingerprints** (from
-   `sourceforge.net/p/forge/documentation/SSH%20Key%20Fingerprints/`, verified
-   against live keyscan — not TOFU).
-5. Publication self-check: ssh-verify the file exists on `frs`, then post
-   the public URL to the run summary.
+- Press only when the latest image run is green and signed; the workflow
+  cosign-verifies the tag first and the ISO installs that tag at boot.
+- Output (run summary has the URL):
+  `https://sourceforge.net/projects/zen-bootc/files/<YYYY-MM-DD>/zen-bootc-<role>-<YYYYMMDD>-<sha7>.iso/download`
+- Secrets: `SF_SSH_PRIVATE_KEY`, `SF_USERNAME`.
+- Known constraints: runner pinned to `ubuntu-24.04` (26.04 AppArmor breaks
+  osbuild mounts); BIB pinned by digest; frs accepts rsync/sftp only.
 
-Public URL of the latest ISO follows
-`https://sourceforge.net/projects/fedora-bootc-system/files/<YYYY-MM-DD>/zen-bootc-<role>-<YYYYMMDD>-<sha7>.iso/download`
-(sourceforge.net/projects/fedora-bootc-system)
+## Local build
 
-Secrets required: `SF_SSH_PRIVATE_KEY` (the key registered on SourceForge)
-and `SF_USERNAME` (SourceForge account name — rsync identifies as
-`$SF_USERNAME@frs.sourceforge.net`).
-
-### One-time SourceForge web-UI steps (not automatable via frs)
-- First upload creates `/home/frs/project/fedora-bootc-system/<date>/`.
-- Set the default-download link for the project landing page manually if
-  desired (Files → gear icon → properties).
-- Auto-mirroring is on by default; leave it.
-
-## Local build (dev loop)
-
-```
+```bash
 sudo podman pull ghcr.io/codeholic-0/zen-bootc:testing
 mkdir -p output
 sudo podman run --rm -it --privileged \
@@ -55,42 +32,13 @@ sudo podman run --rm -it --privileged \
   ghcr.io/codeholic-0/zen-bootc:testing
 ```
 
-The ISO installs the kickstart's bootc-switch target (`:testing`); for a
-`:stable` local ISO, sed the `zen-bootc:testing` line in the toml first
-(CI does this per role; BIB reads plain TOML, and the target must already
-be pulled into storage — BIB doesn't auto-pull).
+Output: `output/bootiso/install.iso`. BIB doesn't auto-pull — the target tag
+must be in storage first. For a `:stable` ISO, sed `zen-bootc:testing` in the
+toml first.
 
-Output: `output/bootiso/install.iso`. Watch `df -h /tmp` in a second
-terminal while it runs (osbuild stages under /tmp).
+## Install
 
-## Install experience
-
-Boot → interactive Anaconda (locale, keyboard, timezone, partitioning, user
-creation — all in the UI). The kickstart contract (`disk_config/iso-kde.toml`):
-
-- Restores the installer screens Anaconda hides in image-mode (Storage,
-  Network, Security, Services, Users, Timezone, **Localization** — without
-  the Localization module the locale screens don't appear at all).
-- `%post`: `bootc switch` pulls `:testing` from GHCR (needs network), then
-  `flatpak remote-add flathub` — flathub setup is ISO-scoped here, not in
-  the image (Containerfile-baked remote-add proved unreliable).
-
-## PARKED — image-builder CLI path (`bootc-generic-iso`) — broken as of 2026-11-10
-
-The new-tool flow was attempted and abandoned (full attempt in
-`testing/compaction.md`):
-
-- `image-builder list` is distro-centric — no bootc types appear (expected);
-  type name validated via `image-builder manifest … bootc-generic-iso`.
-- The 3 GB ISO built fine but failed in VM: boot died pre-tty under our
-  SELinux-enforcing base (`selinux=0` at GRUB got past it), then still no
-  Anaconda GUI — completed boot, no installer, reboot to blank. Suspect:
-  installer env derived from a KDE/wayland-only base lacks the X stack
-  Anaconda needs. The legacy BIB path builds its installer env from stock
-  packages, which is why it doesn't hit this.
-
-Related research: bluefin ISOs come from a dedicated repo
-(`projectbluefin/iso`) using **Titanoboa** (`ublue-os/titanoboa`) — a
-live-ISO-of-the-image contract (offline, `iso.yaml` inside the OS image,
-features a nomodeset fallback GRUB entry). Different contract — not suitable
-here (no live env wanted).
+Boot → interactive Anaconda (locale, keyboard, timezone, partitioning, user).
+`%post`: `bootc switch` to the role tag (network required), then Flathub
+remote-add. Alternative ISO builders (image-builder CLI, titanoboa) were
+rejected — history in `testing/compaction.md`.
