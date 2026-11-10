@@ -5,6 +5,7 @@
 set -u
 
 STATE_DIR=/var/lib/zen-ctl
+REPO=ghcr.io/codeholic-0/zen-bootc
 SELF=$(readlink -f "$0")
 dig() { jq -r "$1" 2>/dev/null; }
 
@@ -87,15 +88,72 @@ cmd_upgrade() {
     exec bootc upgrade
 }
 
+# --- switch: browse/roll to stable|testing tags (manual, confirmed, policy-guarded) ---
+tags_list() {   # dated anchors only, newest first (rolling tags shown separately)
+    podman search --list-tags "$REPO" 2>/dev/null | awk '{print $2}' \
+        | grep -E '^(stable|testing)-[0-9]{8}-[0-9a-f]{7}$' | LC_ALL=C sort -r
+}
+
+switch_show() {   # read-only listing, no elevation assumed
+    local f t tracked now dated
+    tracked=$(bootc status --json 2>/dev/null | dig '.status.booted.image.image.image')
+    [ "$tracked" = "null" ] && tracked=""
+    dated=$(tags_list)
+    for f in stable testing; do
+        echo "$f:"
+        printf '  %-30s%s\n' "$f" "$([ "$REPO:$f" = "$tracked" ] && echo '   <- current')"
+        printf '%s\n' "$dated" | grep "^$f-" | head -4 | while read -r t; do
+            now=""
+            [ "$REPO:$t" = "$tracked" ] && now="   <- current"
+            printf '  %-30s%s\n' "$t" "$now"
+        done
+    done
+    echo "(rolling tags auto-updates; dated tags are pinned rollback anchors)"
+}
+
+cmd_switch() {
+    if [ "${1:-}" = "--list" ]; then switch_show; return 0; fi
+    for_sub switch "$@"
+    local tag out ans
+    if [ -n "${1:-}" ]; then
+        tag=$1
+    else
+        switch_show
+        printf 'tag to switch ("q"=cancel): '
+        read -r tag
+        case "${tag:-q}" in q|""|*[!a-zA-Z0-9._-]*) echo "zen-ctl: no tag selected"; return 0 ;; esac
+    fi
+    case "$tag" in latest) tag=stable ;; stable|testing) ;; *)
+        tags_list | grep -qx "$tag" || { echo "zen-ctl: not a known stable/testing tag: $tag" >&2; return 2; }
+        ;;
+    esac
+    echo "== target probe: $REPO:$tag"
+    out=$(bootc upgrade --tag "$tag" --check 2>&1) || {
+        printf '%s\n' "$out" >&2
+        echo "zen-ctl: probe failed (registry/signature?) — not switching" >&2
+        return 2
+    }
+    [ -n "$out" ] && printf '%s\n' "$out"
+    printf 'switch to %s:%s? [y/N] ' "$REPO" "$tag"
+    read -r ans
+    case "$ans" in [yY]*) ;; *) echo "zen-ctl: canceled"; return 0 ;; esac
+    bootc switch --transport registry "$REPO:$tag" \
+        && { logger -t zen-ctl "switch: -> $tag"; echo "zen-ctl: staged $tag — reboot to enter it"; }
+}
+
 case "${1:-}" in
     check)   shift; cmd_check "$@" ;;
     status)  shift; cmd_status "$@" ;;
     upgrade) shift; cmd_upgrade "$@" ;;
+    switch)  shift; cmd_switch  "$@" ;;
     help|-h|--help|"")
-        echo "usage: zen-ctl check | status | upgrade [--apply]"
+        echo "usage: zen-ctl check | status | upgrade [--apply] | switch [--list|<tag>]"
         echo "  check    probe upstream digest; rc1 = update available"
         echo "  status   running/staged digest + live remote check"
         echo "  upgrade  stage an update (never automatic); --apply reboots into it"
+        echo "  switch   roll the machine to a stable|testing tag (browse latest"
+        echo "           per flavor, probe target, explicit confirm; --list is"
+        echo "           read-only, no elevation)"
         echo "Sudo is prompted automatically; cron runs it as root weekly (Sat 22:00)." ;;
     *) echo "zen-ctl: unknown subcommand '$1'" >&2; exit 2 ;;
 esac

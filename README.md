@@ -53,6 +53,8 @@ zen-ctl check            # probe digest; also via /etc/cron.d/zen-ctl (Sat 22:00
 zen-ctl status           # tracking tag + running/staged digest + remote check
 zen-ctl upgrade          # stage an update (manual only)
 zen-ctl upgrade --apply
+zen-ctl switch           # browse stable|testing tags, probe target, confirm → bootc switch
+ zen-ctl switch --list   # read-only listing, no elevation
 ```
 
 Sudo is prompted automatically. Detection is cron-automated; applying is
