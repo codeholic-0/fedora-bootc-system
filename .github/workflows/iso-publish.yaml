@@ -26,7 +26,8 @@ jobs:
   # Legacy bootc-image-builder (anaconda-iso) flow; docs/iso.md.
   build-iso:
     name: Build & publish ${{ inputs.role }} ISO
-    runs-on: ubuntu-latest
+    # 26.04 runners load bwrap-userns-restrict (AppArmor): osbuild's sandbox
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
