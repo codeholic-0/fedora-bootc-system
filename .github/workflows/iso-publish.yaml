@@ -120,7 +120,10 @@ jobs:
           PKT=$(mktemp); install -m 600 /dev/null "$PKT"; printf '%s\n' "$SF_KEY" > "$PKT"
           SSHOPTS="ssh -i $PKT -o IdentitiesOnly=yes -o UserKnownHostsFile=/tmp/sf_known_hosts -o StrictHostKeyChecking=yes"
           DATE_DIR="$(date -u +%Y-%m-%d)"
-          rsync -av --mkpath -e "$SSHOPTS" \
+          # SourceForge runs rsync 3.1.4 — no --mkpath (3.2+). Pre-create dir.
+          $SSHOPTS "$SF_USER@frs.sourceforge.net" \
+            "mkdir -p /home/frs/project/$SF_PROJECT/$DATE_DIR/"
+          rsync -av -e "$SSHOPTS" \
             output/"$ISO_NAME" output/sha256sums.txt \
             "$SF_USER@frs.sourceforge.net:/home/frs/project/$SF_PROJECT/$DATE_DIR/"
           rm -f "$PKT"
