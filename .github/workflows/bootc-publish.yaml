@@ -202,12 +202,16 @@ jobs:
           EXTRA_TAGS: ${{ matrix.flavor.extra_tags }}
         run: |
           IMAGE="${IMAGE,,}"
-          # Same manifest under every ref; only the first push uploads layers.
-          podman push --digestfile=/tmp/digestfile "$IMAGE:$TAG"
-          for extra in ${EXTRA_TAGS}; do
-            podman push --digestfile=/tmp/digestfile-extra "$IMAGE:$extra"
+          REFS="$IMAGE:$TAG"
+          for extra in ${EXTRA_TAGS}; do REFS="$REFS $IMAGE:$extra"; done
+          REFS="$REFS $DTAG"
+          for ref in $REFS; do
+            # First push uploads fresh blobs but DROPS chunkah layer
+            # annotations (podman #27796) -> digest differs. The second push
+            # converges every ref onto the annotated digest; sign THAT.
+            podman push "$ref"
+            podman push --digestfile=/tmp/digestfile "$ref"
           done
-          podman push --digestfile=/tmp/digestfile "$DTAG"
 
       - name: Install Cosign
         if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
@@ -232,10 +236,18 @@ jobs:
             --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
 
       - name: Verify signature (self-check)
-        # Prove the pushed digest verifies with cosign.pub. Key-based signs
-        # have no Rekor entry, hence --insecure-ignore-tlog.
+        # Verify BY TAG: the tag's registry digest must be the signed one
+        # (podman #27796 class of divergence). No Rekor entry on key-based
+        # signs, hence --insecure-ignore-tlog.
         if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
+        env:
+          TAG: ${{ matrix.flavor.tag }}
+          EXTRA_TAGS: ${{ matrix.flavor.extra_tags }}
         run: |
           IMAGE="${IMAGE,,}"
-          cosign verify --key cosign.pub --insecure-ignore-tlog \
-            "$IMAGE@$(cat /tmp/digestfile)"
+          REFS="$IMAGE:$TAG"
+          for extra in ${EXTRA_TAGS}; do REFS="$REFS $IMAGE:$extra"; done
+          REFS="$REFS $DTAG"
+          for ref in $REFS; do
+            cosign verify --key cosign.pub --insecure-ignore-tlog "$ref"
+          done
