@@ -56,6 +56,7 @@ jobs:
       - name: Build ISO
         # No /dev/kvm on runners: BIB falls back to qemu-TCG (slow, ~45-90min).
         run: |
+          mkdir -p output
           IMAGE="${IMAGE,,}"
           sudo podman run --rm --privileged \
             -v "$PWD/output:/output" \
