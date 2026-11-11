@@ -91,7 +91,10 @@ cmd_idea() {
     rm -rf "$IDEA_DIR"   # stale partial from a failed prior run
     mv "$opt/$d" "$IDEA_DIR"
     rm -f "$tarball"
-    ln -sf "$IDEA_DIR/bin/idea.sh" "$IDEA_BIN"
+    # Newer IDEA ships a native launcher (bin/idea) next to idea.sh — prefer it.
+    launcher="$IDEA_DIR/bin/idea"
+    [ -f "$launcher" ] || launcher="$IDEA_DIR/bin/idea.sh"
+    ln -sf "$launcher" "$IDEA_BIN"
     cat > "$HOME/.local/share/applications/jetbrains-idea-ce.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
