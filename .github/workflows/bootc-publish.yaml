@@ -85,20 +85,20 @@ jobs:
             tag: minimal-latest
             dtag_prefix: minimal
             extra_tags: ""
-            smoke: false
+            smoke: 'false'
           - role: testing
             dockerfile: Containerfile.testing
             tag: testing
             dtag_prefix: testing
             extra_tags: ""
-            smoke: true
+            smoke: 'true'
           - role: final
             dockerfile: Containerfile
             tag: stable
             dtag_prefix: stable
             # stable and latest are the same image; one extra ref, not an extra build
             extra_tags: "latest"
-            smoke: true
+            smoke: 'true'
     steps:
       - name: Decide whether to run
         # Job-level `if` can't see matrix context: the gate lives in a step
