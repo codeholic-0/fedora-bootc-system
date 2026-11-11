@@ -90,10 +90,10 @@ cmd_upgrade() {
     exec bootc upgrade
 }
 
-# --- switch: browse/roll to stable|testing tags (manual, confirmed, policy-guarded) ---
+# --- switch: browse/roll to stable|testing|dev tags (manual, confirmed, policy-guarded) ---
 tags_list() {   # dated anchors only, newest first (rolling tags shown separately)
     podman search --list-tags "$REPO" 2>/dev/null | awk '{print $2}' \
-        | grep -E '^(stable|testing)-[0-9]{8}-[0-9a-f]{7}$' | LC_ALL=C sort -r
+        | grep -E '^(stable|testing|dev)-[0-9]{8}-[0-9a-f]{7}$' | LC_ALL=C sort -r
 }
 
 switch_show() {   # read-only listing, no elevation assumed
@@ -101,7 +101,7 @@ switch_show() {   # read-only listing, no elevation assumed
     tracked=$(bootc status --json 2>/dev/null | dig '.status.booted.image.image.image')
     [ "$tracked" = "null" ] && tracked=""
     dated=$(tags_list)
-    for f in stable testing; do
+    for f in stable testing dev; do
         echo "$f:"
         printf '  %-30s%s\n' "$f" "$([ "$REPO:$f" = "$tracked" ] && echo '   <- current')"
         printf '%s\n' "$dated" | grep "^$f-" | head -4 | while read -r t; do
@@ -125,8 +125,8 @@ cmd_switch() {
         read -r tag
         case "${tag:-q}" in q|""|*[!a-zA-Z0-9._-]*) echo "zen-ctl: no tag selected"; return 0 ;; esac
     fi
-    case "$tag" in latest) tag=stable ;; stable|testing) ;; *)
-        tags_list | grep -qx "$tag" || { echo "zen-ctl: not a known stable/testing tag: $tag" >&2; return 2; }
+    case "$tag" in latest) tag=stable ;; stable|testing|dev) ;; *)
+        tags_list | grep -qx "$tag" || { echo "zen-ctl: not a known stable/testing/dev tag: $tag" >&2; return 2; }
         ;;
     esac
     echo "== target probe: $REPO:$tag"
@@ -153,7 +153,7 @@ case "${1:-}" in
         echo "  check    probe upstream digest; rc1 = update available"
         echo "  status   running/staged digest + live remote check"
         echo "  upgrade  stage an update (never automatic); --apply reboots into it"
-        echo "  switch   roll the machine to a stable|testing tag (browse latest"
+        echo "  switch   roll the machine to a stable|testing|dev tag (browse latest"
         echo "           per flavor, probe target, explicit confirm; --list is"
         echo "           read-only, no elevation)"
         echo "Sudo is prompted automatically; cron runs it as root weekly (Sat 22:00)." ;;

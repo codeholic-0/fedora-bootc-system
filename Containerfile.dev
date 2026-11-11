@@ -1,0 +1,41 @@
+# zen-bootc dev flavor: stable base + lean dev tooling layer.
+# Base image carries no dev toolchain; tooling lives only here. Optional
+# extras (brew/idea/sdkman/nvm) are user-installed via zen-dev, never baked.
+# Migrate: zen-ctl switch (stable <-> dev) or bootc switch ...:dev.
+FROM ghcr.io/codeholic-0/zen-bootc:stable
+
+# --- 1) VSCodium (upstream rpm repo, gpg-checked) ---
+RUN tee /etc/yum.repos.d/vscodium.repo <<'EOF'
+[gitlab.com_paulcarroty_vscodium_repo]
+name=gitlab.com_paulcarroty_vscodium_repo
+baseurl=https://paulcarroty.gitlab.io/vscodium-deb-rpm-repo/rpms/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg
+metadata_expire=1h
+EOF
+
+# --- 2) Toolchain + IDE (node/brew/sdkman = zen-dev territory, not baked) ---
+RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
+    dnf install -y \
+        gcc \
+        gcc-c++ \
+        make \
+        cmake \
+        pkgconf \
+        python3 \
+        python3-pip \
+        codium
+
+# --- 3) zen-dev: optional tooling installer (user-level, $HOME-scoped) ---
+COPY files/usr/local/bin/zen-dev /usr/local/bin/zen-dev
+RUN chmod 0755 /usr/local/bin/zen-dev
+
+# --- 4) Build-hygiene cleanup + lint (mirrors base §28–29) ---
+# /run must exclude /run/systemd* — buildah bind-mounts DNS files there
+# ("Device or resource busy").
+RUN rm -rf /var/cache/* \
+    && find /run -mindepth 1 ! -path '/run/systemd*' ! -name '.containerenv' -exec rm -rf {} +
+
+RUN bootc container lint

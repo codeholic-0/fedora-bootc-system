@@ -1,0 +1,145 @@
+#!/bin/bash
+# zen-dev — optional dev tooling for the zen-bootc dev image.
+# Installs user-scoped tooling into $HOME via each tool's upstream installer;
+# never writes to /usr — image consistency is untouchable. rc edits are
+# idempotent and only made for bash/zsh login shells.
+set -u
+
+NVM_API="https://api.github.com/repos/nvm-sh/nvm/releases/latest"
+# NOTE: releases/latest is wrong here — JetBrains ships pycharm/etc. from the
+# same repo; pick the newest release whose tag starts with idea/.
+IDEA_API="https://api.github.com/repos/JetBrains/intellij-community/releases?per_page=100"
+IDEA_DIR="$HOME/.local/opt/idea"
+IDEA_BIN="$HOME/.local/bin/idea"
+
+login_shell() { getent passwd "$(id -u)" | cut -d: -f7; }
+
+rc_for() {
+    case "$1" in
+        */bash) echo "$HOME/.bashrc" ;;
+        */zsh)  echo "$HOME/.zshrc" ;;
+        *)      return 1 ;;
+    esac
+}
+
+# rc_append FILE LINE — idempotent single-line append.
+rc_append() {
+    local f="$1" line="$2"
+    mkdir -p "$(dirname "$f")" && touch "$f"
+    grep -qF -- "$line" "$f" 2>/dev/null || printf '\n%s\n' "$line" >> "$f"
+}
+
+installed() {
+    case "$1" in
+        brew)   [ -x /home/linuxbrew/.linuxbrew/bin/brew ] ;;
+        idea)   [ -x "$IDEA_BIN" ] ;;
+        sdkman) [ -d "$HOME/.sdkman/bin" ] ;;
+        nvm)    [ -d "$HOME/.nvm" ] ;;
+    esac
+}
+
+cmd_list() {
+    local shell rc t
+    shell=$(login_shell)
+    echo "zen-dev: login shell: $shell"
+    for t in brew idea sdkman nvm; do
+        if installed "$t"; then st="installed"; else st="-"; fi
+        printf '  %-8s %s\n' "$t" "$st"
+    done
+    echo "usage: zen-dev [brew|idea|sdkman|nvm|list]"
+}
+
+cmd_brew() {
+    local rc line
+    if installed brew; then echo "zen-dev: brew already installed"; return 0; fi
+    # Shell-agnostic installer; only bash/zsh get the automatic rc edit.
+    rc=$(rc_for "$(login_shell)") \
+        || echo "zen-dev: unsupported shell — wire brew shellenv manually" >&2
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || return 1
+    if [ -n "${rc:-}" ]; then
+        line='eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
+        rc_append "$rc" "$line"
+        grep -qF -- "$line" "$rc" && echo "zen-dev: shellenv added to $rc (open a new shell)"
+    fi
+}
+
+cmd_idea() {
+    if installed idea; then echo "zen-dev: idea already installed"; return 0; fi
+    local tmp d resp tag ver name url
+    echo "zen-dev: resolving latest IDEA CE release..."
+    resp=$(curl -fsSL "$IDEA_API") || return 1
+    tag=$(jq -r '[.[] | select(.tag_name | startswith("idea/"))][0].tag_name' <<<"$resp")
+    case "$tag" in idea/*) ver=${tag#idea/} ;; *) echo "zen-dev: no idea/ release found" >&2; return 1 ;; esac
+    case "$(uname -m)" in
+        aarch64) name="idea-${ver}-aarch64.tar.gz" ;;
+        *)       name="idea-${ver}.tar.gz" ;;
+    esac
+    url=$(jq -r --arg n "$name" \
+        '[.[] | select(.tag_name | startswith("idea/"))][0].assets[] | select(.name == $n) | .browser_download_url' \
+        <<<"$resp")
+    [ -n "$url" ] || { echo "zen-dev: asset $name not found in $tag" >&2; return 1; }
+    echo "zen-dev: downloading $name (large)..."
+    mkdir -p "$HOME/.local/opt" "$HOME/.local/bin" "$HOME/.local/share/applications"
+    tmp=$(mktemp -d) || return 1
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fSL "$url" -o "$tmp/idea.tar.gz" || { rm -rf "$tmp"; return 1; }
+    tar -xzf "$tmp/idea.tar.gz" -C "$tmp" || { rm -rf "$tmp"; return 1; }
+    d=$(tar -tzf "$tmp/idea.tar.gz" | head -1 | cut -d/ -f1)
+    [ -n "$d" ] || { echo "zen-dev: unexpected archive layout" >&2; rm -rf "$tmp"; return 1; }
+    mv "$d" "$IDEA_DIR" && rm -rf "$tmp"
+    ln -sf "$IDEA_DIR/bin/idea.sh" "$IDEA_BIN"
+    cat > "$HOME/.local/share/applications/jetbrains-idea-ce.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IntelliJ IDEA Community
+GenericName=IDE
+Comment=IntelliJ IDEA Community Edition
+Exec=$IDEA_BIN
+Icon=$IDEA_DIR/bin/idea.svg
+Terminal=false
+Categories=Development;IDE;
+Keywords=idea;intellij;ide;
+EOF
+    [ -x "$IDEA_BIN" ] && echo "zen-dev: idea installed ($IDEA_DIR)"
+}
+
+cmd_sdkman() {
+    local rc
+    if installed sdkman; then echo "zen-dev: sdkman already installed"; return 0; fi
+    rc=$(rc_for "$(login_shell)") || {
+        echo "zen-dev: unsupported shell '$(login_shell)' — sdkman targets bash/zsh, install manually" >&2
+        return 2
+    }
+    curl -s "https://get.sdkman.io" | bash || return 1
+    grep -q "sdkman-init.sh" "$rc" \
+        && echo "zen-dev: sdkman installed (init line in $rc — open a new shell)" \
+        || { echo "zen-dev: sdkman installed but init line missing from $rc" >&2; return 1; }
+}
+
+cmd_nvm() {
+    local rc ver
+    if installed nvm; then echo "zen-dev: nvm already installed"; return 0; fi
+    rc=$(rc_for "$(login_shell)") || {
+        echo "zen-dev: unsupported shell '$(login_shell)' — nvm targets bash/zsh, install manually" >&2
+        return 2
+    }
+    echo "zen-dev: resolving latest nvm release..."
+    ver=$(curl -fsSL "$NVM_API" | jq -r '.tag_name')
+    [ -n "$ver" ] && [ "$ver" != "null" ] || { echo "zen-dev: could not resolve nvm version" >&2; return 1; }
+    echo "zen-dev: installing nvm $ver..."
+    curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/$ver/install.sh" | bash || return 1
+    grep -q "NVM_DIR" "$rc" \
+        && echo "zen-dev: nvm $ver installed (init line in $rc — open a new shell)" \
+        || { echo "zen-dev: nvm installed but init line missing from $rc" >&2; return 1; }
+}
+
+case "${1:-list}" in
+    list|"")   cmd_list ;;
+    brew)      shift; cmd_brew "$@" ;;
+    idea)      shift; cmd_idea "$@" ;;
+    sdkman)    shift; cmd_sdkman "$@" ;;
+    nvm)       shift; cmd_nvm "$@" ;;
+    help|-h|--help) cmd_list ;;
+    *) echo "zen-dev: unknown tool '$1'" >&2; cmd_list; exit 2 ;;
+esac
