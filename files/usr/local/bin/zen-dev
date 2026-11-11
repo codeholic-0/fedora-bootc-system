@@ -65,7 +65,7 @@ cmd_brew() {
 
 cmd_idea() {
     if installed idea; then echo "zen-dev: idea already installed"; return 0; fi
-    local tmp d resp tag ver name url
+    local tarball d resp tag ver name url
     echo "zen-dev: resolving latest IDEA CE release..."
     resp=$(curl -fsSL "$IDEA_API") || return 1
     tag=$(jq -r '[.[] | select(.tag_name | startswith("idea/"))][0].tag_name' <<<"$resp")
@@ -79,14 +79,18 @@ cmd_idea() {
         <<<"$resp")
     [ -n "$url" ] || { echo "zen-dev: asset $name not found in $tag" >&2; return 1; }
     echo "zen-dev: downloading $name (large)..."
-    mkdir -p "$HOME/.local/opt" "$HOME/.local/bin" "$HOME/.local/share/applications"
-    tmp=$(mktemp -d) || return 1
-    trap 'rm -rf "$tmp"' EXIT
-    curl -fSL "$url" -o "$tmp/idea.tar.gz" || { rm -rf "$tmp"; return 1; }
-    tar -xzf "$tmp/idea.tar.gz" -C "$tmp" || { rm -rf "$tmp"; return 1; }
-    d=$(tar -tzf "$tmp/idea.tar.gz" | head -1 | cut -d/ -f1)
-    [ -n "$d" ] || { echo "zen-dev: unexpected archive layout" >&2; rm -rf "$tmp"; return 1; }
-    mv "$d" "$IDEA_DIR" && rm -rf "$tmp"
+    # Download+extract in the install dir, not /tmp — tmpfs may be too small
+    # for the tarball + unpacked tree; the tarball is removed after unpack.
+    local opt="$HOME/.local/opt"
+    mkdir -p "$opt" "$HOME/.local/bin" "$HOME/.local/share/applications"
+    tarball="$opt/idea.tar.gz"
+    curl -fSL "$url" -o "$tarball" || { rm -f "$tarball"; return 1; }
+    tar -xzf "$tarball" -C "$opt" || { rm -f "$tarball"; return 1; }
+    d=$(tar -tzf "$tarball" | head -1 | cut -d/ -f1)
+    [ -n "$d" ] || { echo "zen-dev: unexpected archive layout" >&2; rm -f "$tarball"; return 1; }
+    rm -rf "$IDEA_DIR"   # stale partial from a failed prior run
+    mv "$opt/$d" "$IDEA_DIR"
+    rm -f "$tarball"
     ln -sf "$IDEA_DIR/bin/idea.sh" "$IDEA_BIN"
     cat > "$HOME/.local/share/applications/jetbrains-idea-ce.desktop" <<EOF
 [Desktop Entry]
