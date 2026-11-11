@@ -12,6 +12,7 @@ Published at: `ghcr.io/codeholic-0/zen-bootc`
 |---|---|---|
 | `testing` | `Containerfile.testing` | Worked-on variant; runs on the real machine. |
 | `stable` / `latest` | `Containerfile` | Promoted variant (copy testing → Containerfile). |
+| `dev` | `Containerfile.dev` | Stable base + VSCodium, gcc/make/cmake/python3, `zen-dev`. Tracks stable, not testing. |
 | `minimal-latest` | `Containerfile.minimal` | Headless variant. |
 
 `<role>-<YYYYMMDD>-<sha7>` tags are immutable rollback anchors.
@@ -53,21 +54,38 @@ zen-ctl check            # probe digest; also via /etc/cron.d/zen-ctl (Sat 22:00
 zen-ctl status           # tracking tag + running/staged digest + remote check
 zen-ctl upgrade          # stage an update (manual only)
 zen-ctl upgrade --apply
-zen-ctl switch           # browse stable|testing tags, probe target, confirm → bootc switch
- zen-ctl switch --list   # read-only listing, no elevation
+zen-ctl switch           # browse stable|testing|dev tags, probe target, confirm → bootc switch
+zen-ctl switch --list   # read-only listing, no elevation
 ```
 
 Sudo is prompted automatically. Detection is cron-automated; applying is
 always manual.
 
+## Dev extras (dev image)
+
+`dev` ships optional tooling via `zen-dev` — nothing is baked in; installs are
+user-scoped (`$HOME`) and never touch the image, so upgrades stay clean:
+
+```bash
+zen-dev            # list tools + install state
+zen-dev brew       # Homebrew (official installer)
+zen-dev idea       # IntelliJ IDEA CE (latest GitHub release)
+zen-dev sdkman     # SDKMAN!
+zen-dev nvm        # nvm (latest GitHub release)
+```
+
+Versions resolve live from upstream at install time. bash/zsh login shells
+get rc init lines automatically; other shells: idea/brew still work,
+sdkman/nvm abort.
+
 ## Repo layout
 
 ```
-Containerfile{,.testing,.minimal}    image specs (promote: copy testing->Containerfile)
+Containerfile{,.testing,.minimal,.dev} image specs (promote: copy testing->Containerfile)
 policy.json                          signed-ref policy shipped into the image
 registries.d/                        registries.d snippet shipped into the image
 disk_config/iso-kde.toml             bootc-image-builder config for the ISO
-files/                               image-shipped files (zen-ctl, cron, drop-ins)
+files/                               image-shipped files (zen-ctl, zen-dev, cron, drop-ins)
 docs/iso.md                          ISO build + SourceForge guide
 plymouth.toml                        boot kernel args
 legacy/nix/                          dormant Nix-era leftovers; image has NO Nix

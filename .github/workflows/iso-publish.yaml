@@ -9,7 +9,7 @@ on:
       role:
         description: "Image role the ISO installs (bootc-switch target)"
         type: choice
-        options: [testing, stable]
+        options: [testing, stable, dev]
         default: testing
 
 env:

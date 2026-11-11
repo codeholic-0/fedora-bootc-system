@@ -27,6 +27,10 @@ on:
         description: "Build final"
         type: boolean
         default: false
+      dev:
+        description: "Build dev"
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -50,6 +54,7 @@ jobs:
       minimal: ${{ steps.filter.outputs.minimal }}
       testing: ${{ steps.filter.outputs.testing }}
       final: ${{ steps.filter.outputs.final }}
+      dev: ${{ steps.filter.outputs.dev }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,9 +68,19 @@ jobs:
               - 'Containerfile.minimal'
             testing:
               - 'Containerfile.testing'
+              - 'files/**'
             final:
               - 'Containerfile'
               - 'policy.json'
+              - 'files/**'
+              - '.github/workflows/bootc-publish.yaml'
+            # dev tracks stable: stable inputs rebuild dev so its base
+            # never lags the promotion.
+            dev:
+              - 'Containerfile.dev'
+              - 'Containerfile'
+              - 'policy.json'
+              - 'files/**'
               - '.github/workflows/bootc-publish.yaml'
 
   # One matrix job for all three flavors; per-flavor logic is matrix data.
@@ -275,5 +290,144 @@ jobs:
           for extra in ${EXTRA_TAGS}; do REFS="$REFS $IMAGE:$extra"; done
           REFS="$REFS $DTAG"
           for ref in $REFS; do
+            cosign verify --key cosign.pub --insecure-ignore-tlog "$ref"
+          done
+
+  # Dev flavor builds AFTER the matrix job: Containerfile.dev FROMs the
+  # pushed :stable tag, so the fresh promotion must be in the registry
+  # before this runs.
+  dev:
+    name: Build dev
+    needs: [changes, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Decide whether to run
+        id: gate
+        env:
+          CHANGED: ${{ needs.changes.outputs.dev }}
+          TOGGLED: ${{ github.event.inputs.dev }}
+        run: |
+          case "${GITHUB_EVENT_NAME}" in
+            schedule)          SHOULD_RUN=true ;;
+            push)              [[ "${CHANGED}" == "true" ]] && SHOULD_RUN=true ;;
+            workflow_dispatch) [[ "${TOGGLED}" == "true" ]] && SHOULD_RUN=true ;;
+          esac
+          echo "SHOULD_RUN=${SHOULD_RUN:-false}" >> "$GITHUB_ENV"
+
+      - name: Maximize build space
+        if: env.SHOULD_RUN == 'true'
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
+      - name: Checkout code
+        if: env.SHOULD_RUN == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install podman
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Log in to GHCR
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          IMAGE="${IMAGE,,}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build image
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          IMAGE="${IMAGE,,}"
+          # Base tag is the just-pushed :stable (see job comment).
+          podman build --pull=newer -f Containerfile.dev -t "$IMAGE:dev" .
+          echo "DTAG=$IMAGE:dev-$(date -u +%Y%m%d)-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
+
+      - name: Smoke-check image
+        # Base asserts (inherited from :stable) + the dev layer: toolchain,
+        # VSCodium, zen-dev wiring.
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          set -euo pipefail
+          IMAGE="${IMAGE,,}"
+          podman run --rm "$IMAGE:dev" /bin/bash -c '
+            set -euo pipefail
+            grep -q "^NAME=\"ZenC OS\"" /etc/os-release
+            grep -q "^PRETTY_NAME=\"ZenC OS 45\"" /usr/lib/os-release
+            [ "$(readlink /etc/os-release)" = "../usr/lib/os-release" ]
+            bash -n /usr/local/bin/zen-ctl
+            bash -n /usr/local/bin/zen-dev
+            [ "$(stat -c %a /usr/local/bin/zen-dev)" = "755" ]
+            command -v bootc jq gcc make cmake python3 codium zen-dev
+            grep -q sigstoreSigned /etc/containers/policy.json
+            [ -f /usr/share/containers/cosign.pub ]
+            [ -f /etc/cron.d/zen-ctl ]
+            grep -q "^g docker" /usr/lib/sysusers.d/zen-bootc.conf
+            grep -q vscodium /etc/yum.repos.d/vscodium.repo
+          '
+
+      - name: Rechunk image (small delta updates)
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          set -euox pipefail
+          IMAGE="${IMAGE,,}"
+          CHUNKAH_CONFIG_FILE="$(mktemp)"
+          CHUNKAH_OUTPUT_DIR="$(mktemp -d "${WORKSPACE:-/tmp}"/zen-bootc-chunkah-XXXXXX)"
+          podman inspect "$IMAGE:dev" > "$CHUNKAH_CONFIG_FILE"
+
+          podman run --rm \
+            --mount=type=image,src="$IMAGE:dev",target=/chunkah \
+            -v "$CHUNKAH_CONFIG_FILE:/chunkah-config.json:ro,Z" \
+            -v "$CHUNKAH_OUTPUT_DIR:/run/out:Z" \
+            "$RECHUNK_IMAGE" \
+            build \
+            --verbose \
+            --compressed \
+            --max-layers 128 \
+            --prune /sysroot/ \
+            --label ostree.commit- --label ostree.final-diffid- \
+            --config /chunkah-config.json \
+            --output oci:/run/out/chunked
+
+          CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
+          podman untag "$IMAGE:dev" || true
+          podman tag "$CHUNKED_IMAGE" "$IMAGE:dev" "$DTAG"
+
+      - name: Push image
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          IMAGE="${IMAGE,,}"
+          for ref in "$IMAGE:dev" "$DTAG"; do
+            podman push "$ref"
+            podman push --digestfile=/tmp/digestfile "$ref"
+          done
+
+      - name: Install Cosign
+        if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: 'v3.1.4'
+
+      - name: Log in to GHCR (docker client, for cosign)
+        if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Sign image
+        if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          IMAGE="${IMAGE,,}"
+          cosign sign -y --new-bundle-format=false --use-signing-config=false \
+            --key env://COSIGN_PRIVATE_KEY "$IMAGE@$(cat /tmp/digestfile)"
+
+      - name: Verify signature (self-check)
+        if: env.SHOULD_RUN == 'true' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE="${IMAGE,,}"
+          for ref in "$IMAGE:dev" "$DTAG"; do
             cosign verify --key cosign.pub --insecure-ignore-tlog "$ref"
           done
