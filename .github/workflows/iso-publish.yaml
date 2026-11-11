@@ -1,16 +1,24 @@
 name: Publish ISO
 
-# Manual-only ISO build + SourceForge publish. Role selectable via dispatch
-# input (default testing). See docs/iso.md.
+# Manual-only ISO build + SourceForge publish. Roles flag-selected via
+# dispatch (any subset builds concurrently, one matrix leg per role).
+# See docs/iso.md.
 
 on:
   workflow_dispatch:
     inputs:
-      role:
-        description: "Image role the ISO installs (bootc-switch target)"
-        type: choice
-        options: [testing, stable, dev]
-        default: testing
+      testing:
+        description: "Build testing ISO"
+        type: boolean
+        default: false
+      stable:
+        description: "Build stable ISO"
+        type: boolean
+        default: false
+      dev:
+        description: "Build dev ISO"
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -24,34 +32,58 @@ concurrency:
 
 jobs:
   # Legacy bootc-image-builder (anaconda-iso) flow; docs/iso.md.
+  # One matrix leg per role; each gets its own runner (BIB is disk-heavy,
+  # so concurrency is free). Legs share only the frs date dir — per-ISO
+  # filenames differ, and rsync mkdir races on the remote parent are
+  # benign (EEXIST → proceeds).
   build-iso:
-    name: Build & publish ${{ inputs.role }} ISO
+    name: Build & publish ${{ matrix.role }} ISO
     # 26.04 runners load bwrap-userns-restrict (AppArmor): osbuild's sandbox
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        role: [testing, stable, dev]
     steps:
+      - name: Decide whether to run
+        # First step: skipped roles pay for nothing. (Quoted-string compare
+        # per the GHA loose-equality house rule.)
+        id: gate
+        env:
+          TOGGLED: ${{ github.event.inputs[matrix.role] }}
+        run: |
+          SHOULD_RUN=false
+          [[ "${TOGGLED}" == "true" ]] && SHOULD_RUN=true
+          echo "SHOULD_RUN=${SHOULD_RUN}" >> "$GITHUB_ENV"
+
       - name: Set provenance sha + role
+        if: env.SHOULD_RUN == 'true'
         env:
           SHA0: ${{ github.sha }}
-          ROLE0: ${{ inputs.role }}
+          ROLE0: ${{ matrix.role }}
         run: |
           echo "SHA=${SHA0}" >> "$GITHUB_ENV"
           echo "ROLE=${ROLE0}" >> "$GITHUB_ENV"
 
       - name: Maximize build space
+        if: env.SHOULD_RUN == 'true'
         uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
 
       - name: Checkout code
+        if: env.SHOULD_RUN == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Cosign
+        if: env.SHOULD_RUN == 'true'
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           cosign-release: 'v3.1.4'
 
-      - name: Verify :${{ inputs.role }} signature BEFORE building
+      - name: Verify :${{ matrix.role }} signature BEFORE building
         # Don't publish an installer for an unsigned role image.
+        if: env.SHOULD_RUN == 'true'
         run: |
           IMAGE="${IMAGE,,}"
           cosign verify --key cosign.pub --insecure-ignore-tlog "$IMAGE:${ROLE}" \
@@ -59,21 +91,22 @@ jobs:
           echo "Signature OK: $(jq -r '.[0].critical.image."docker-manifest-digest"' /tmp/verify-out.json)"
 
       - name: Install podman
+        if: env.SHOULD_RUN == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y podman rsync
 
       - name: Build ISO
-        # Kickstart target is generated per-role (BIB takes plain TOML only);
-        # newer BIB doesn't auto-pull. 24.04 runners expose /dev/kvm — the
-        # test ISO built in ~6 min, not the TCG slowness feared pre-kvm.
+        # Kickstart is role-agnostic: %post derives the switch target from
+        # the installed system's origin, so no per-role substitution here.
+        # BIB pinned by digest; refetch when bumping deliberately. 24.04
+        # runners expose /dev/kvm — the test ISO built in ~6 min, not the
+        # TCG slowness feared pre-kvm.
+        if: env.SHOULD_RUN == 'true'
         run: |
           mkdir -p output
           IMAGE="${IMAGE,,}"
           sudo podman pull "$IMAGE:$ROLE"
-          # Kickstart is role-agnostic: %post derives the switch target from
-          # the installed system's origin, so no per-role substitution here.
-          # BIB pinned by digest; refetch when bumping deliberately.
           sudo podman run --rm --privileged \
             -v "$PWD/output:/output" \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
@@ -88,6 +121,7 @@ jobs:
         # zen-bootc-<role>-<UTC date>-<sha7> (sha = dispatched head commit).
         # Sums file named per-ISO: same-day/same-role represses can't clobber
         # each other's checksums on SourceForge (frs rsync overwrites).
+        if: env.SHOULD_RUN == 'true'
         run: |
           set -euo pipefail
           ISO_NAME="zen-bootc-${ROLE}-$(date -u +%Y%m%d)-${SHA:0:7}.iso"
@@ -98,6 +132,7 @@ jobs:
           echo "ISO_HASH=$ISO_HASH" >> "$GITHUB_ENV"
 
       - name: Upload artifact
+        if: env.SHOULD_RUN == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.ISO_NAME }}
@@ -108,6 +143,7 @@ jobs:
 
       - name: Pin SourceForge host key (verify, don't trust)
         # Fingerprints from sourceforge.net/p/forge/documentation/SSH%20Key%20Fingerprints/
+        if: env.SHOULD_RUN == 'true'
         run: |
           set -euo pipefail
           ssh-keyscan -t ed25519,rsa frs.sourceforge.net > /tmp/sf_known_hosts
@@ -117,6 +153,7 @@ jobs:
           grep -q 'SHA256:xB2rnn0NUjZ/E0IXQp4gyPqc7U7gjcw7G26RhkDyk90' <<<"$KEYS" || { echo "RSA fingerprint mismatch"; exit 1; }
 
       - name: Publish ISO to SourceForge
+        if: env.SHOULD_RUN == 'true'
         env:
           SF_KEY: ${{ secrets.SF_SSH_PRIVATE_KEY }}
           SF_USER: ${{ secrets.SF_USERNAME }}
@@ -139,6 +176,7 @@ jobs:
       - name: Verify publication (self-check)
         # Prove the file landed (as cosign self-check does for the image).
         # rsync --list-only stays inside the restricted-shell protocol.
+        if: env.SHOULD_RUN == 'true'
         env:
           SF_KEY: ${{ secrets.SF_SSH_PRIVATE_KEY }}
           SF_USER: ${{ secrets.SF_USERNAME }}

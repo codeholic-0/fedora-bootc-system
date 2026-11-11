@@ -6,9 +6,14 @@ SourceForge. Config: `disk_config/iso-kde.toml`.
 ## CI
 
 ```bash
-gh workflow run iso-publish.yaml --ref main                 # role=testing
-gh workflow run iso-publish.yaml --ref main -f role=stable  # role=stable
+gh workflow run iso-publish.yaml --ref main -f testing=true          # one
+gh workflow run iso-publish.yaml --ref main -f stable=true -f dev=true   # two
+gh workflow run iso-publish.yaml --ref main -f testing=true -f stable=true -f dev=true  # all three
 ```
+
+Roles are flags: any subset builds concurrently (one matrix leg per role,
+own runner each; untouched roles cost nothing). The Actions UI exposes the
+same three checkboxes.
 
 - Press only when the latest image run is green and signed; the workflow
   cosign-verifies the tag first and the ISO installs that tag at boot.
