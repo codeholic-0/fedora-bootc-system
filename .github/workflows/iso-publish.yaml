@@ -71,7 +71,8 @@ jobs:
           mkdir -p output
           IMAGE="${IMAGE,,}"
           sudo podman pull "$IMAGE:$ROLE"
-          sed -i "s|zen-bootc:testing|zen-bootc:$ROLE|" disk_config/iso-kde.toml
+          # Kickstart is role-agnostic: %post derives the switch target from
+          # the installed system's origin, so no per-role substitution here.
           # BIB pinned by digest; refetch when bumping deliberately.
           sudo podman run --rm --privileged \
             -v "$PWD/output:/output" \
