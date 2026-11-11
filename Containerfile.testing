@@ -351,18 +351,24 @@ COPY registries.d/zen-bootc.yaml /etc/containers/registries.d/zen-bootc.yaml
 COPY files/usr/lib/systemd/system/systemd-remount-fs.service.d/10-composefs-skip.conf \
      /usr/lib/systemd/system/systemd-remount-fs.service.d/10-composefs-skip.conf
 
+# --- 26b) sysusers: declare docker group (docker-ce creates it via scriptlet) ---
+COPY files/usr/lib/sysusers.d/zen-bootc.conf /usr/lib/sysusers.d/zen-bootc.conf
+
 # --- 27) zen-ctl: upgrade check/status/apply CLI + weekly cron ---
 COPY files/usr/local/bin/zen-ctl /usr/local/bin/zen-ctl
 COPY files/etc/cron.d/zen-ctl /etc/cron.d/zen-ctl
 RUN chmod 0755 /usr/local/bin/zen-ctl && chmod 0644 /etc/cron.d/zen-ctl
 
 # --- 28) Build-hygiene cleanup ---
-# No dnf clean all (cache mounts): purge runtime-only state. /run must exclude
-# /run/systemd* — buildah bind-mounts DNS files there ("Device or resource busy").
+# No dnf clean all (cache mounts): purge runtime-only state. /var/cache/* is
+# build residue — regenerates on demand at runtime (also satisfies lint
+# var-tmpfiles). /run must exclude /run/systemd* — buildah bind-mounts DNS
+# files there ("Device or resource busy").
 RUN rm -rf \
         /var/log/dnf5.log* \
         /var/lib/dnf \
         /var/lib/flatpak/repo/tmp \
+        /var/cache/* \
     && find /run -mindepth 1 ! -path '/run/systemd*' ! -name '.containerenv' -exec rm -rf {} +
 
 # --- 29) Bootc conformance lint ---
