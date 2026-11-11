@@ -1,15 +1,23 @@
-# disk_config/iso-kde.toml — testing-ISO config (legacy bootc-image-builder
+# disk_config/iso-kde.toml — ISO config (legacy bootc-image-builder
 # anaconda-iso flow). See docs/iso.md.
 
 # Kickstart minimal on purpose: everything except the contract lines is set
 # interactively in Anaconda (image stays locale-neutral).
 # Flathub lives here (ISO-side), not in the image — a Containerfile bake
 # proved unreliable; %post lands it into the freshly deployed system.
+# Role-agnostic by design: the %post derives the switch target from the
+# freshly installed system's own origin — the ISO installs and tracks
+# exactly the image it was built from.
 
 [customizations.installer.kickstart]
 contents = """
 %post
-bootc switch --mutate-in-place --transport registry ghcr.io/codeholic-0/zen-bootc:testing
+ref=$(grep -h '^container-image-reference=' /ostree/deploy/default/deploy/*.origin | head -1 | sed 's|.*registry:||')
+case "$ref" in
+  ghcr.io/codeholic-0/zen-bootc:*) ;;
+  *) echo "zen-bootc: unexpected origin ref: '$ref'"; exit 1 ;;
+esac
+bootc switch --mutate-in-place --transport registry "$ref"
 flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak remote-modify --system --enable flathub
 %end

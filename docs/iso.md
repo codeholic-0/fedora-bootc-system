@@ -35,12 +35,16 @@ sudo podman run --rm -it --privileged \
 ```
 
 Output: `output/bootiso/install.iso`. BIB doesn't auto-pull — the target tag
-must be in storage first. For a `:stable` ISO, sed `zen-bootc:testing` in the
-toml first.
+must be in storage first. The ISO installs **exactly the image you pass it**:
+the kickstart is role-agnostic — `%post` reads the freshly installed system's
+own origin ref and re-pulls that same tag, so build from `:testing`, `:stable`
+or `:dev` with zero config edits.
 
 ## Install
 
 Boot → interactive Anaconda (locale, keyboard, timezone, partitioning, user).
-`%post`: `bootc switch` to the role tag (network required), then Flathub
-remote-add. Alternative ISO builders (image-builder CLI, titanoboa) were
-rejected — history in `testing/compaction.md`.
+`%post`: derive the tracked tag from the install's origin (`container-image
+-reference=...` in `/ostree/deploy/default/deploy/*.origin`), `bootc switch`
+to it (network required), then Flathub remote-add. Alternative ISO builders
+(image-builder CLI, titanoboa) were rejected — history in
+`testing/compaction.md`.
