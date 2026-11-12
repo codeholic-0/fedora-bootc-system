@@ -50,6 +50,5 @@ or `:dev` with zero config edits.
 Boot → interactive Anaconda (locale, keyboard, timezone, partitioning, user).
 `%post`: derive the tracked tag from the install's origin (`container-image
 -reference=...` in `/ostree/deploy/default/deploy/*.origin`), `bootc switch`
-to it (network required), then Flathub remote-add. Alternative ISO builders
-(image-builder CLI, titanoboa) were rejected — history in
-`testing/compaction.md`.
+to it (network required), then Flathub remote-add. `%post` also installs
+zen-dev to `~/.local/bin` for every created user.

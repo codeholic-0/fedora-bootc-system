@@ -1,7 +1,6 @@
 # zen-bootc dev flavor: stable base + lean dev tooling layer.
 # Base image carries no dev toolchain; tooling lives only here.
-# flavors; self-updates from the repo). Migrate: zen-ctl switch
-# (stable <-> dev) or bootc switch ...:dev.
+# Migrate: zen-ctl switch (stable <-> dev) or bootc switch ...:dev.
 FROM ghcr.io/codeholic-0/zen-bootc:stable
 
 # --- 1) VSCodium (upstream rpm repo, gpg-checked) ---
