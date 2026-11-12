@@ -88,7 +88,8 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         kdnssd \
         kdegraphics-thumbnailers \
         kdenetwork-filesharing \
-        kscreen
+        kscreen \
+        kde-partitionmanager
 
 # --- 7) Desktop extras (frameworks pulled in by KDE apps) ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
@@ -293,6 +294,7 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         nano
 
 # --- 21) CLI utilities (rescue kit) ---
+# Modern CLI kit + generic repair/inspect/diagnose tools: distro-packaged, version-stable
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
     dnf -y install \
         btop \
@@ -304,12 +306,25 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         7zip \
         zip \
         wget2 \
+        wget2-wget \
         curl \
         which \
         sudo \
         lsof \
         plocate \
-        tar
+        tar \
+        bat \
+        eza \
+        fd-find \
+        fzf \
+        ripgrep \
+        zoxide \
+        dos2unix \
+        time \
+        whois \
+        mtr \
+        smem \
+        scrub
 
 # --- 22) Vulkan & graphics CLI ---
 RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
