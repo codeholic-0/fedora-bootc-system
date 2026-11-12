@@ -7,7 +7,9 @@ on:
       - "Containerfile"
       - "Containerfile.testing"
       - "Containerfile.minimal"
+      - "Containerfile.dev"
       - "policy.json"
+      - "files/**"
       - ".github/workflows/bootc-publish.yaml"
   # Weekly rebuild: tracks Fedora 45 package/base updates without any commits.
   # 18:05 UTC Saturday (off-peak offset from the hour).
@@ -63,6 +65,10 @@ jobs:
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
+          # 'some-with-excludes' is required: under the default 'some',
+          # negated rules INVERT-match (any file outside files/home/**),
+          # so !files/home/** would catch-all every unrelated push.
+          predicate-quantifier: 'some-with-excludes'
           filters: |
             minimal:
               - 'Containerfile.minimal'
@@ -84,6 +90,7 @@ jobs:
               - 'Containerfile'
               - 'policy.json'
               - 'files/**'
+              - '!files/home/**'
               - '.github/workflows/bootc-publish.yaml'
 
   # One matrix job for all three flavors; per-flavor logic is matrix data.
