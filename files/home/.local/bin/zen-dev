@@ -38,6 +38,8 @@ installed() {
         idea)   [ -x "$IDEA_BIN" ] ;;
         sdkman) [ -d "$HOME/.sdkman/bin" ] ;;
         nvm)    [ -d "$HOME/.nvm" ] ;;
+        uv)     [ -x "$HOME/.local/bin/uv" ] ;;
+        rust)   [ -x "$HOME/.cargo/bin/cargo" ] ;;
     esac
 }
 
@@ -45,11 +47,11 @@ cmd_list() {
     local shell rc t
     shell=$(login_shell)
     echo "zen-dev: login shell: $shell"
-    for t in brew idea sdkman nvm; do
+    for t in brew idea sdkman nvm uv rust; do
         if installed "$t"; then st="installed"; else st="-"; fi
         printf '  %-8s %s\n' "$t" "$st"
     done
-    echo "usage: zen-dev [brew|idea|sdkman|nvm|update|list]"
+    echo "usage: zen-dev [brew|idea|sdkman|nvm|uv|rust|update|list]"
 }
 
 cmd_update() {
@@ -132,6 +134,28 @@ EOF
     [ -x "$IDEA_BIN" ] && echo "zen-dev: idea installed ($IDEA_DIR)"
 }
 
+cmd_uv() {
+    # astral's official installer — shell-agnostic, no rc edit needed
+    # (installs to ~/.local/bin, which is on PATH by default).
+    if installed uv; then echo "zen-dev: uv already installed"; return 0; fi
+    echo "zen-dev: installing uv (official astral installer)..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh || return 1
+    [ -x "$HOME/.local/bin/uv" ] \
+        && echo "zen-dev: uv installed (~/.local/bin/uv)" \
+        || { echo "zen-dev: uv installer finished but binary missing from ~/.local/bin" >&2; return 1; }
+}
+
+cmd_rust() {
+    # rustup official installer — shell-agnostic (installs ~/.cargo + ~/.rustup;
+    # installer appends the env line to your rc itself).
+    if installed rust; then echo "zen-dev: rust already installed"; return 0; fi
+    echo "zen-dev: installing rust (official rustup installer)..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || return 1
+    [ -x "$HOME/.cargo/bin/cargo" ] \
+        && echo "zen-dev: rust installed (cargo in ~/.cargo/bin — open a new shell)" \
+        || { echo "zen-dev: rustup finished but cargo missing from ~/.cargo/bin" >&2; return 1; }
+}
+
 cmd_sdkman() {
     local rc
     if installed sdkman; then echo "zen-dev: sdkman already installed"; return 0; fi
@@ -168,6 +192,8 @@ case "${1:-list}" in
     idea)      shift; cmd_idea "$@" ;;
     sdkman)    shift; cmd_sdkman "$@" ;;
     nvm)       shift; cmd_nvm "$@" ;;
+    uv)        shift; cmd_uv "$@" ;;
+    rust)      shift; cmd_rust "$@" ;;
     update)    shift; cmd_update "$@" ;;
     help|-h|--help) cmd_list ;;
     *) echo "zen-dev: unknown command '$1'" >&2; cmd_list; exit 2 ;;
