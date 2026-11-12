@@ -1,7 +1,8 @@
 # zen-bootc dev flavor: stable base + lean dev tooling layer.
-# Base image carries no dev toolchain; tooling lives only here. Optional
-# extras (brew/idea/sdkman/nvm) are user-installed via zen-dev, never baked.
-# Migrate: zen-ctl switch (stable <-> dev) or bootc switch ...:dev.
+# Base image carries no dev toolchain; tooling lives only here. zen-dev is
+# NOT baked — it's a user-local tool (installed to ~/.local/bin, all
+# flavors; self-updates from the repo). Migrate: zen-ctl switch
+# (stable <-> dev) or bootc switch ...:dev.
 FROM ghcr.io/codeholic-0/zen-bootc:stable
 
 # --- 1) VSCodium (upstream rpm repo, gpg-checked) ---
@@ -28,11 +29,7 @@ RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \
         python3-pip \
         codium
 
-# --- 3) zen-dev: optional tooling installer (user-level, $HOME-scoped) ---
-COPY files/usr/local/bin/zen-dev /usr/local/bin/zen-dev
-RUN chmod 0755 /usr/local/bin/zen-dev
-
-# --- 4) Build-hygiene cleanup + lint (mirrors base §28–29) ---
+# --- 3) Build-hygiene cleanup + lint (mirrors base §28–29) ---
 # /run must exclude /run/systemd* — buildah bind-mounts DNS files there
 # ("Device or resource busy").
 RUN rm -rf /var/cache/* \

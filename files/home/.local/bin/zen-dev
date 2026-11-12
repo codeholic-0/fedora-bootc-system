@@ -1,9 +1,12 @@
 #!/bin/bash
-# zen-dev — optional dev tooling for the zen-bootc dev image.
-# Installs user-scoped tooling into $HOME via each tool's upstream installer;
-# never writes to /usr — image consistency is untouchable. rc edits are
-# idempotent and only made for bash/zsh login shells.
+# zen-dev — user-local dev tooling (installed to ~/.local/bin, NOT baked
+# into the image; self-updates via 'zen-dev update' from this repo's raw
+# main). Installs user-scoped tooling into $HOME via each tool's upstream
+# installer; never writes to /usr — image consistency is untouchable.
+# rc edits are idempotent and only made for bash/zsh login shells.
 set -u
+
+ZEN_DEV_RAW="https://raw.githubusercontent.com/codeholic-0/zen-bootc/main/files/home/.local/bin/zen-dev"
 
 NVM_API="https://api.github.com/repos/nvm-sh/nvm/releases/latest"
 # NOTE: releases/latest is wrong here — JetBrains ships pycharm/etc. from the
@@ -46,7 +49,25 @@ cmd_list() {
         if installed "$t"; then st="installed"; else st="-"; fi
         printf '  %-8s %s\n' "$t" "$st"
     done
-    echo "usage: zen-dev [brew|idea|sdkman|nvm|list]"
+    echo "usage: zen-dev [brew|idea|sdkman|nvm|update|list]"
+}
+
+cmd_update() {
+    # Fetch latest zen-dev from raw main, sanity-check, atomically replace.
+    local tmp target="$HOME/.local/bin/zen-dev"
+    echo "zen-dev: checking for updates..."
+    tmp=$(mktemp) || return 1
+    curl -fsSL "$ZEN_DEV_RAW" -o "$tmp" || { rm -f "$tmp"; echo "zen-dev: fetch failed" >&2; return 1; }
+    if ! bash -n "$tmp" 2>/dev/null || ! grep -q '^# zen-dev' "$tmp"; then
+        echo "zen-dev: fetched content failed sanity checks — not installed" >&2
+        rm -f "$tmp"; return 1
+    fi
+    if cmp -s "$tmp" "$target" 2>/dev/null; then
+        echo "zen-dev: up to date"; rm -f "$tmp"; return 0
+    fi
+    mkdir -p "$(dirname "$target")"
+    mv "$tmp" "$target" && chmod 0755 "$target"
+    echo "zen-dev: updated ($target — applies on next run)"
 }
 
 cmd_brew() {
@@ -147,6 +168,7 @@ case "${1:-list}" in
     idea)      shift; cmd_idea "$@" ;;
     sdkman)    shift; cmd_sdkman "$@" ;;
     nvm)       shift; cmd_nvm "$@" ;;
+    update)    shift; cmd_update "$@" ;;
     help|-h|--help) cmd_list ;;
-    *) echo "zen-dev: unknown tool '$1'" >&2; cmd_list; exit 2 ;;
+    *) echo "zen-dev: unknown command '$1'" >&2; cmd_list; exit 2 ;;
 esac

@@ -69,13 +69,16 @@ jobs:
             testing:
               - 'Containerfile.testing'
               - 'files/**'
+              - '!files/home/**'   # user-local tooling (zen-dev) is not baked
             final:
               - 'Containerfile'
               - 'policy.json'
               - 'files/**'
+              - '!files/home/**'
               - '.github/workflows/bootc-publish.yaml'
             # dev tracks stable: stable inputs rebuild dev so its base
-            # never lags the promotion.
+            # never lags the promotion. zen-dev changes ride here too —
+            # the dev job's fetch check validates the raw URL.
             dev:
               - 'Containerfile.dev'
               - 'Containerfile'
@@ -200,6 +203,15 @@ jobs:
             [ -f /etc/cron.d/zen-ctl ]
             grep -q "^g docker" /usr/lib/sysusers.d/zen-bootc.conf
           '
+
+      - name: zen-dev fetch check (user-local, not baked)
+        # zen-dev lives in $HOME, not the image; CI validates the raw URL
+        # parses. Cheap; repeats per leg when the matrix runs multiple.
+        if: env.SHOULD_RUN == 'true' && matrix.flavor.smoke == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/codeholic-0/zen-bootc/main/files/home/.local/bin/zen-dev | bash -n
+          echo "zen-dev raw fetch parses OK"
 
       - name: Rechunk image (small delta updates)
         if: env.SHOULD_RUN == 'true'
@@ -347,7 +359,7 @@ jobs:
 
       - name: Smoke-check image
         # Base asserts (inherited from :stable) + the dev layer: toolchain,
-        # VSCodium, zen-dev wiring.
+        # VSCodium. zen-dev is NOT baked (user-local on all flavors).
         if: env.SHOULD_RUN == 'true'
         run: |
           set -euo pipefail
@@ -358,15 +370,20 @@ jobs:
             grep -q "^PRETTY_NAME=\"ZenC OS 45\"" /usr/lib/os-release
             [ "$(readlink /etc/os-release)" = "../usr/lib/os-release" ]
             bash -n /usr/local/bin/zen-ctl
-            bash -n /usr/local/bin/zen-dev
-            [ "$(stat -c %a /usr/local/bin/zen-dev)" = "755" ]
-            command -v bootc jq gcc make cmake python3 codium zen-dev
+            command -v bootc jq gcc make cmake python3 codium
             grep -q sigstoreSigned /etc/containers/policy.json
             [ -f /usr/share/containers/cosign.pub ]
             [ -f /etc/cron.d/zen-ctl ]
             grep -q "^g docker" /usr/lib/sysusers.d/zen-bootc.conf
             grep -q vscodium /etc/yum.repos.d/vscodium.repo
           '
+
+      - name: zen-dev fetch check (user-local, not baked)
+        if: env.SHOULD_RUN == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/codeholic-0/zen-bootc/main/files/home/.local/bin/zen-dev | bash -n
+          echo "zen-dev raw fetch parses OK"
 
       - name: Rechunk image (small delta updates)
         if: env.SHOULD_RUN == 'true'
