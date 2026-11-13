@@ -45,6 +45,7 @@ installed() {
 
 cmd_list() {
     local shell rc t
+    has_cc || cc_note   # passive upfront inform; installs prompt for themselves
     shell=$(login_shell)
     echo "zen-dev: login shell: $shell"
     for t in brew idea sdkman nvm uv rust; do
@@ -134,12 +135,15 @@ EOF
     [ -x "$IDEA_BIN" ] && echo "zen-dev: idea installed ($IDEA_DIR)"
 }
 
-warn_no_cc() {
-    # rust/uv source builds invoke the system C linker — that lives in the
-    # OS image (dev flavor), not user space. Detection only, not a failure.
-    { command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 \
-        || command -v clang >/dev/null 2>&1; } && return 0
-    echo "zen-dev: note: no C linker (cc/gcc) found — source builds will fail." >&2
+# rust/uv source builds invoke the system C linker — that lives in the
+# OS image (dev flavor), not user space. Detection only, not a failure.
+has_cc() {
+    command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 \
+        || command -v clang >/dev/null 2>&1
+}
+
+cc_note() {
+    echo "zen-dev: no C linker (cc/gcc) found — source builds will fail." >&2
     echo "  on zen-bootc: dev flavor ships gcc (zen-ctl switch), or use a distrobox" >&2
 }
 
@@ -147,30 +151,32 @@ cmd_uv() {
     # astral's official installer — shell-agnostic, no rc edit needed
     # (installs to ~/.local/bin, which is on PATH by default).
     if installed uv; then echo "zen-dev: uv already installed"; return 0; fi
+    if ! has_cc; then
+        cc_note   # source-built sdist installs need a system linker
+        read -r -p "zen-dev: install anyway? [y/N] " a
+        case "$a" in y*|Y*) ;; *) echo "zen-dev: aborted" >&2; return 1 ;; esac
+    fi
     echo "zen-dev: installing uv (official astral installer)..."
     curl -LsSf https://astral.sh/uv/install.sh | sh || return 1
-    if [ -x "$HOME/.local/bin/uv" ]; then
-        echo "zen-dev: uv installed (~/.local/bin/uv)"
-        warn_no_cc   # source-built sdist installs need a system linker
-    else
-        echo "zen-dev: uv installer finished but binary missing from ~/.local/bin" >&2
-        return 1
-    fi
+    [ -x "$HOME/.local/bin/uv" ] \
+        && echo "zen-dev: uv installed (~/.local/bin/uv)" \
+        || { echo "zen-dev: uv installer finished but binary missing from ~/.local/bin" >&2; return 1; }
 }
 
 cmd_rust() {
     # rustup official installer — shell-agnostic (installs ~/.cargo + ~/.rustup;
     # installer appends the env line to your rc itself).
     if installed rust; then echo "zen-dev: rust already installed"; return 0; fi
+    if ! has_cc; then
+        cc_note   # cargo invokes the system cc linker at build time
+        read -r -p "zen-dev: install anyway? [y/N] " a
+        case "$a" in y*|Y*) ;; *) echo "zen-dev: aborted" >&2; return 1 ;; esac
+    fi
     echo "zen-dev: installing rust (official rustup installer)..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || return 1
-    if [ -x "$HOME/.cargo/bin/cargo" ]; then
-        echo "zen-dev: rust installed (cargo in ~/.cargo/bin — open a new shell)"
-        warn_no_cc   # cargo invokes the system cc linker at build time
-    else
-        echo "zen-dev: rustup finished but cargo missing from ~/.cargo/bin" >&2
-        return 1
-    fi
+    [ -x "$HOME/.cargo/bin/cargo" ] \
+        && echo "zen-dev: rust installed (cargo in ~/.cargo/bin — open a new shell)" \
+        || { echo "zen-dev: rustup finished but cargo missing from ~/.cargo/bin" >&2; return 1; }
 }
 
 cmd_sdkman() {
